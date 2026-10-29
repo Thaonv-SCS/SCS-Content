@@ -1,0 +1,19 @@
+[
+  { "brand": "Nike", "line": "Mercurial", "aliases": ["Vapor", "Superfly", "Mercurial Vapor", "Mercurial Superfly"] },
+  { "brand": "Nike", "line": "Phantom", "aliases": ["Phantom GX", "Phantom Luna", "Phantom 6"] },
+  { "brand": "Nike", "line": "Tiempo", "aliases": ["Tiempo Legend"] },
+  { "brand": "Nike", "line": "Hypervenom", "aliases": [] },
+  { "brand": "adidas", "line": "Predator", "aliases": ["Predator Elite", "Predator Accuracy"] },
+  { "brand": "adidas", "line": "F50", "aliases": ["F50 Hyperfast"] },
+  { "brand": "adidas", "line": "Copa", "aliases": ["Copa Mundial", "Copa Pure"] },
+  { "brand": "Puma", "line": "Future", "aliases": [] },
+  { "brand": "Puma", "line": "Ultra", "aliases": [] },
+  { "brand": "Puma", "line": "King", "aliases": [] },
+  { "brand": "Mizuno", "line": "Morelia", "aliases": ["Morelia Neo"] },
+  { "brand": "Mizuno", "line": "Alpha", "aliases": ["Mizuno Alpha"] },
+  { "brand": "New Balance", "line": "Furon", "aliases": [] },
+  { "brand": "New Balance", "line": "Tekela", "aliases": [] },
+  { "brand": "Skechers", "line": "SKX", "aliases": ["Razor"] },
+  { "brand": "On", "line": "On Football", "aliases": [] },
+  { "brand": "Under Armour", "line": "Magnetico", "aliases": [] }
+]

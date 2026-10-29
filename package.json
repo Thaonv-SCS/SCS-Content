@@ -1,0 +1,24 @@
+{
+  "name": "soccerstore-content-app",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @app/web",
+    "fetch": "npm run fetch -w @app/pipeline --",
+    "seed": "npm run seed -w @app/pipeline",
+    "digest": "npm run digest -w @app/pipeline --",
+    "gate": "npm run gate -w @app/pipeline",
+    "pipeline": "npm run pipeline -w @app/pipeline --",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "typescript": "^7.0.2"
+  }
+}

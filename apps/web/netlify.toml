@@ -1,0 +1,8 @@
+# Netlify: Base directory để trống (gốc repo, nơi cài npm workspaces), Package directory = apps/web.
+# Đường dẫn trong file này tính từ gốc repo.
+[build]
+  command = "npm run build --workspace=@app/web"
+  publish = "apps/web/.next"
+
+[build.environment]
+  NODE_VERSION = "24"

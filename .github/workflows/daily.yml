@@ -1,0 +1,56 @@
+name: Daily digest
+
+on:
+  schedule:
+    - cron: '0 23 * * *'   # 06:00 giờ Việt Nam
+  workflow_dispatch:         # chạy tay (từ nút "Chạy ngay" trong app hoặc trên GitHub): bỏ qua công tắc lịch
+    inputs:
+      hours:
+        description: 'Lấy bài trong bao nhiêu giờ qua'
+        default: '48'
+      force:
+        description: 'Tạo lại bản tin hôm nay nếu đã có'
+        type: boolean
+        default: false
+      task:
+        description: 'digest = lấy bài & tạo bản tin; style = cập nhật ghi chú văn phong'
+        type: choice
+        options: [digest, style]
+        default: digest
+
+concurrency:
+  group: daily-digest
+  cancel-in-progress: false
+
+env:
+  SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+  SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+
+      - name: Check schedule switch
+        id: gate
+        if: github.event_name == 'schedule'
+        run: npm run gate
+
+      - name: Run pipeline
+        if: github.event_name == 'workflow_dispatch' || steps.gate.outputs.run == 'true'
+        run: >
+          npm run pipeline --
+          --trigger=${{ github.event_name == 'workflow_dispatch' && 'manual' || 'schedule' }}
+          --task=${{ inputs.task || 'digest' }}
+          --hours=${{ inputs.hours || '48' }}
+          ${{ inputs.force && '--force' || '' }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          FOOTBALL_DATA_TOKEN: ${{ secrets.FOOTBALL_DATA_TOKEN }}

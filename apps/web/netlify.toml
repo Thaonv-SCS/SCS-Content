@@ -3,6 +3,9 @@
 [build]
   command = "npm run build --workspace=@app/web"
   publish = "apps/web/.next"
+  # Tiết kiệm credit gói free: chỉ build khi đổi code web hoặc phần dùng chung.
+  # Đẩy code chỉ đụng pipeline / migration / docs / workflow thì Netlify bỏ qua (exit 0 = bỏ qua build).
+  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- apps/web packages/core package.json package-lock.json tsconfig.base.json"
 
 [build.environment]
   NODE_VERSION = "24"

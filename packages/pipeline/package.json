@@ -10,6 +10,7 @@
     "gate": "tsx --env-file-if-exists=../../.env src/gate.ts",
     "pipeline": "tsx --env-file-if-exists=../../.env src/run.ts",
     "style": "tsx --env-file-if-exists=../../.env src/style.ts",
+    "check-github": "tsx --env-file-if-exists=../../.env src/check-github.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

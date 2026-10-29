@@ -12,7 +12,14 @@ import { supabaseServer } from '@/lib/supabase';
  * - Chưa cấu hình (đang chạy trên máy): chạy ngay trên máy này, nền, không chờ.
  */
 async function startRun(task: RunTask, force: boolean): Promise<string | null> {
-  const { GITHUB_TOKEN, GITHUB_REPO, GITHUB_REF = 'main', NETLIFY, VERCEL } = process.env;
+  const { NETLIFY, VERCEL } = process.env;
+  const GITHUB_TOKEN = process.env.GITHUB_TOKEN?.trim();
+  const GITHUB_REF = process.env.GITHUB_REF?.trim() || 'main';
+  // Chấp nhận cả "owner/repo", link "https://github.com/owner/repo(.git)", lẫn dấu cách thừa
+  const GITHUB_REPO = process.env.GITHUB_REPO?.trim()
+    .replace(/^https?:\/\/github\.com\//i, '')
+    .replace(/\.git$/i, '')
+    .replace(/\/+$/, '');
   // Trên hosting (Netlify/Vercel) không chạy được pipeline tại chỗ — bắt buộc đi qua GitHub Actions
   if ((NETLIFY || VERCEL) && !(GITHUB_TOKEN && GITHUB_REPO)) {
     return 'Chưa cấu hình GITHUB_TOKEN / GITHUB_REPO trên hosting nên không chạy được.';
@@ -32,7 +39,16 @@ async function startRun(task: RunTask, force: boolean): Promise<string | null> {
       body: JSON.stringify({ ref: GITHUB_REF, inputs: { hours: '48', force, task } }),
     });
     if (!res.ok) {
-      const failed: RunStatus = { ...queued, status: 'failed', message: `GitHub từ chối: HTTP ${res.status}` };
+      const detail = ((await res.json().catch(() => null)) as { message?: string } | null)?.message ?? '';
+      const hint =
+        res.status === 404
+          ? ` — token không thấy repo "${GITHUB_REPO}": kiểm tra GITHUB_REPO đúng dạng owner/repo, và token đã chọn repo này ở mục Repository access.`
+          : res.status === 401
+            ? ' — token sai hoặc đã hết hạn.'
+            : res.status === 403
+              ? ' — token thiếu quyền "Actions: Read and write".'
+              : '';
+      const failed: RunStatus = { ...queued, status: 'failed', message: `GitHub từ chối: HTTP ${res.status} ${detail}${hint}` };
       await supabase.from('settings').upsert({ key: 'last_run', value: failed });
       return failed.message!;
     }

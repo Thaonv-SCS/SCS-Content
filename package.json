@@ -12,6 +12,7 @@
     "digest": "npm run digest -w @app/pipeline --",
     "gate": "npm run gate -w @app/pipeline",
     "pipeline": "npm run pipeline -w @app/pipeline --",
+    "check-github": "npm run check-github -w @app/pipeline",
     "typecheck": "npm run typecheck --workspaces --if-present"
   },
   "engines": {

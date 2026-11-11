@@ -18,7 +18,29 @@ interface Entry {
   lastmod: Date | null;
 }
 
-const byNewest = (a: Entry, b: Entry) => (b.lastmod?.getTime() ?? 0) - (a.lastmod?.getTime() ?? 0);
+/**
+ * Một số site (vd BootsCulture) để tiêu đề chung cho mọi trang trong thẻ meta. Nếu tiêu đề meta không chứa
+ * từ nào trong đường dẫn bài thì dựng tiêu đề từ đường dẫn: /articles/new-adidas-predator-2027 → "New adidas predator 2027".
+ */
+function titleFromMetaOrSlug(metaTitle: string | undefined, url: string): string | undefined {
+  const slug = decodeURIComponent(new URL(url).pathname.split('/').filter(Boolean).pop() ?? '')
+    .replace(/\.[a-z]+$/i, '')
+    .replace(/^\d+-/, '');
+  const host = new URL(url).hostname.toLowerCase();
+  // Bỏ chữ trùng tên miền (vd "boots" trong bootsculture.com) — tên site nằm sẵn trong tiêu đề chung
+  const words = slug
+    .split(/[-_]+/)
+    .filter((w) => w.length >= 3 && !/^\d+$/.test(w))
+    .filter((w) => !host.includes(w.toLowerCase()));
+  const fold = (s: string) => s.toLowerCase();
+  const hits = metaTitle ? words.filter((w) => fold(metaTitle).includes(fold(w))).length : 0;
+  if (metaTitle && (!words.length || hits >= Math.min(2, words.length))) return metaTitle;
+  if (!words.length) return metaTitle;
+  const text = slug.replace(/[-_]+/g, ' ').trim();
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+const byNewest =(a: Entry, b: Entry) => (b.lastmod?.getTime() ?? 0) - (a.lastmod?.getTime() ?? 0);
 
 async function readSitemap(url: string): Promise<{ urls: Entry[]; children: Entry[] }> {
   const doc = xmlParser.parse(await fetchText(url)) as Node;
@@ -60,13 +82,14 @@ export const sitemapConnector: Connector = {
     const items = await mapPolite(fresh, async (u): Promise<RawItemInput | null> => {
       try {
         const meta = await fetchPageMeta(u.loc);
-        if (!meta.title) return null;
         // lastmod chỉ là lần sửa trang; ngày đăng trong chính bài mới là chuẩn
         if (meta.publishedAt && meta.publishedAt < ctx.since) return null;
+        const title = titleFromMetaOrSlug(meta.title, u.loc);
+        if (!title) return null;
         return {
           sourceSlug: source.slug,
           url: u.loc,
-          title: meta.title,
+          title,
           content: meta.description,
           imageUrls: meta.image ? [meta.image] : [],
           publishedAt: meta.publishedAt ?? u.lastmod,

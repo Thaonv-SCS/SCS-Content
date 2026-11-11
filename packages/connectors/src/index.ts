@@ -5,6 +5,7 @@ import { sitemapConnector } from './sitemap.ts';
 export { fetchManualLink } from './manual.ts';
 export { fetchPageMeta, HttpError } from './http.ts';
 export { fetchMatches, type MatchResult } from './football-data.ts';
+export { detectSource, previewSource, type DetectResult, type SourcePreview } from './detect.ts';
 
 /** Mỗi loại nguồn một connector. Thêm loại mới = thêm module + đăng ký ở đây. */
 const registry: Partial<Record<SourceKind, Connector>> = {

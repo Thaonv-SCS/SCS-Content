@@ -6,7 +6,7 @@ try {
 } catch {}
 
 const config: NextConfig = {
-  transpilePackages: ['@app/core'],
+  transpilePackages: ['@app/core', '@app/connectors'],
 };
 
 export default config;

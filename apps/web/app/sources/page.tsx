@@ -1,29 +1,18 @@
-import { CATEGORY_LABEL, type CategoryHint, type SourceKind } from '@app/core';
+import { CATEGORY_LABEL, type CategoryHint } from '@app/core';
 import { supabaseServer } from '@/lib/supabase';
-import { timeAgo } from '@/lib/format';
-import { setEnabled, setWeight } from './actions';
+import { AddSourceForm, SourceRowView, type Option, type SourceRow } from './source-forms';
 
-const HINT_LABEL: Record<CategoryHint, string> = { ...CATEGORY_LABEL, match: 'Trận đấu', mixed: 'Tổng hợp' };
-
-type SourceRow = {
-  id: string;
-  name: string;
-  kind: SourceKind;
-  url: string;
-  category_hint: CategoryHint;
-  weight: number;
-  enabled: boolean;
-  note: string | null;
-  last_success_at: string | null;
-  last_error: string | null;
-  fail_count: number;
-};
+const HINT_LABEL: Record<CategoryHint, string> = { ...CATEGORY_LABEL, match: 'Trận đấu', mixed: 'Tổng hợp (AI tự chia ngăn)' };
+const CATEGORY_OPTIONS: Option[] = (['mixed', ...Object.keys(CATEGORY_LABEL), 'match'] as CategoryHint[]).map((value) => ({
+  value,
+  label: HINT_LABEL[value],
+}));
 
 export default async function SourcesPage() {
   const supabase = await supabaseServer();
   const { data, error } = await supabase
     .from('sources')
-    .select('id,name,kind,url,category_hint,weight,enabled,note,last_success_at,last_error,fail_count')
+    .select('id,name,kind,url,category_hint,weight,enabled,note,config,last_success_at,last_error,fail_count')
     .order('enabled', { ascending: false })
     .order('name');
   if (error) return <p className="warn">Không đọc được danh sách nguồn: {error.message}</p>;
@@ -33,8 +22,14 @@ export default async function SourcesPage() {
     <>
       <h1>Nguồn</h1>
       <p className="muted">
-        {sources.filter((s) => s.enabled).length}/{sources.length} nguồn đang bật
+        {sources.filter((s) => s.enabled).length}/{sources.length} nguồn đang bật · ngăn của nguồn chỉ là gợi ý, AI vẫn tự chia từng bài vào ngăn
+        phù hợp
       </p>
+
+      <h2>Thêm nguồn</h2>
+      <AddSourceForm categories={CATEGORY_OPTIONS} />
+
+      <h2>Danh sách nguồn</h2>
       <div className="card scroll">
         <table>
           <thead>
@@ -49,34 +44,7 @@ export default async function SourcesPage() {
           </thead>
           <tbody>
             {sources.map((s) => (
-              <tr key={s.id} className={s.enabled ? '' : 'off'}>
-                <td>
-                  <a href={s.url} target="_blank" rel="noreferrer">{s.name}</a>
-                  {s.note && <div className="meta">{s.note}</div>}
-                </td>
-                <td><span className="badge">{s.kind}</span></td>
-                <td>{HINT_LABEL[s.category_hint]}</td>
-                <td>
-                  <form action={setWeight} className="inline">
-                    <input type="hidden" name="id" value={s.id} />
-                    <input type="number" name="weight" min={0} max={1} step={0.1} defaultValue={s.weight} />
-                    <button type="submit" className="ghost">Lưu</button>
-                  </form>
-                </td>
-                <td>
-                  {s.enabled ? timeAgo(s.last_success_at) : '—'}
-                  {s.fail_count > 0 && (
-                    <div className="warn">
-                      Lỗi {s.fail_count} lần liên tiếp: {s.last_error}
-                    </div>
-                  )}
-                </td>
-                <td>
-                  <form action={setEnabled.bind(null, s.id, !s.enabled)}>
-                    <button type="submit" className="ghost">{s.enabled ? 'Tắt' : 'Bật'}</button>
-                  </form>
-                </td>
-              </tr>
+              <SourceRowView key={s.id} s={s} categories={CATEGORY_OPTIONS} categoryLabel={HINT_LABEL[s.category_hint as CategoryHint] ?? s.category_hint} />
             ))}
           </tbody>
         </table>

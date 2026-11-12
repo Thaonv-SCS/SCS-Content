@@ -21,13 +21,21 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <>
               <Link href="/">Bản tin</Link>
               <Link href="/products">Post sản phẩm</Link>
+              <Link href="/stock">Tình trạng hàng</Link>
+              <Link href="/images">Up ảnh</Link>
               <Link href="/captions">Kho caption</Link>
               <Link href="/raw">Bài thô</Link>
               <Link href="/sources">Nguồn</Link>
               <Link href="/settings">Cài đặt</Link>
             </>
           )}
-          {me?.role === 'staff' && <Link href="/products">Post sản phẩm</Link>}
+          {me?.role === 'staff' && (
+            <>
+              <Link href="/products">Post sản phẩm</Link>
+              <Link href="/stock">Tình trạng hàng</Link>
+              <Link href="/images">Up ảnh</Link>
+            </>
+          )}
           {me && (
             <form action={signOut} className="spacer">
               <span className="meta">{me.email} </span>

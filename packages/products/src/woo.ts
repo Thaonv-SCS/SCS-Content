@@ -85,11 +85,27 @@ export async function fetchExamplesBySlugs(slugs: string[]): Promise<WooExample[
   const found = await getJson<{ id: number }[]>(
     `${WOO_URL}/wp-json/wp/v2/product?per_page=100&slug=${slugs.join(',')}&_fields=id`,
   );
-  if (!found.length) return [];
+  return fetchExamplesByIds(found.map((p) => p.id));
+}
+
+export async function fetchExamplesByIds(ids: number[]): Promise<WooExample[]> {
+  if (!ids.length) return [];
   const store = await getJson<StoreProduct[]>(
-    `${WOO_URL}/wp-json/wc/store/v1/products?per_page=100&include=${found.map((p) => p.id).join(',')}`,
+    `${WOO_URL}/wp-json/wc/store/v1/products?per_page=100&include=${ids.slice(0, 100).join(',')}`,
   );
   return withFullContent(store);
+}
+
+/** Lấy slug sản phẩm từ link trên web, vd https://soccerstore.vn/san-pham/abc-xyz/ → "abc-xyz". */
+export function slugFromProductUrl(url: string): string | null {
+  const m = url.trim().match(/\/san-pham\/([^/?#]+)/);
+  if (!m) return null;
+  // Trình duyệt có thể hiện "β" thay vì "%ce%b2" — đưa về dạng mã hóa như WordPress lưu
+  let seg = m[1]!;
+  try {
+    seg = decodeURIComponent(seg);
+  } catch {}
+  return encodeURIComponent(seg).toLowerCase();
 }
 
 async function withFullContent(store: StoreProduct[]): Promise<WooExample[]> {
@@ -130,17 +146,27 @@ function wcAuth(): string {
   return 'Basic ' + Buffer.from(`${key}:${secret}`).toString('base64');
 }
 
-async function wc<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
+async function wcRaw<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<{ data: T; headers: Headers }> {
   const res = await fetch(`${WOO_URL}/wp-json/wc/v3${path}`, {
     method,
     headers: { ...UA, Authorization: wcAuth(), 'Content-Type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
-    signal: AbortSignal.timeout(30_000),
+    signal: AbortSignal.timeout(60_000),
   });
   const data = (await res.json().catch(() => null)) as T & { message?: string };
-  if (!res.ok) throw new Error(`WooCommerce ${res.status}: ${data?.message ?? 'lỗi không rõ'}`);
-  return data;
+  if (!res.ok) {
+    const hint = res.status === 403 && !data?.message ? ' (có thể bị Cloudflare chặn)' : '';
+    throw new Error(`WooCommerce ${res.status}: ${data?.message ?? 'lỗi không rõ'}${hint}`);
+  }
+  return { data, headers: res.headers };
 }
+
+export async function wc<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
+  return (await wcRaw<T>(method, path, body)).data;
+}
+
+/** Như wc() nhưng trả kèm header (tổng số trang / tổng số sản phẩm của danh sách). */
+export const wcList = wcRaw;
 
 /** Kiểm tra khóa API: đọc được thuộc tính sản phẩm là khóa hợp lệ. */
 export async function checkWooAccess(): Promise<string[]> {
@@ -162,6 +188,7 @@ export interface DraftInput {
   name: string;
   sku: string | null;
   price: number | null;
+  sale_price?: number | null;
   slug: string;
   description_html: string;
   short_description_html: string;
@@ -209,6 +236,22 @@ export async function detectBrand(productName: string): Promise<Brand | null> {
   return matchBrand(productName, await fetchBrands());
 }
 
+/**
+ * Ô "Loại Đinh" trên web ghi cả loại sân lẫn mã đinh (vd "Cỏ Nhân Tạo" + "TF") — bộ lọc web dùng loại sân.
+ */
+export function soleplateOptions(plate?: string): string[] {
+  const p = plate?.trim().toUpperCase();
+  if (!p) return [];
+  const surface: Record<string, string[]> = {
+    TF: ['Cỏ Nhân Tạo'],
+    AG: ['Cỏ Nhân Tạo'],
+    FG: ['Cỏ Tự Nhiên'],
+    SG: ['Cỏ Tự Nhiên'],
+    MG: ['Cỏ Nhân Tạo', 'Cỏ Tự Nhiên'],
+  };
+  return [...(surface[p] ?? []), p];
+}
+
 export async function createDraftProduct(input: DraftInput): Promise<DraftResult> {
   if (input.sku) {
     const dup = await wc<{ id: number; name: string; status: string }[]>('GET', `/products?sku=${encodeURIComponent(input.sku)}&status=any`);
@@ -218,9 +261,10 @@ export async function createDraftProduct(input: DraftInput): Promise<DraftResult
   // Thuộc tính dùng chung trên web ("Chọn Size", "Loại Đinh") — gắn theo id để dùng đúng bộ lọc sẵn có
   const attrs = await wc<{ id: number; name: string }[]>('GET', '/products/attributes');
   const attrId = (name: string) => attrs.find((a) => a.name.toLowerCase() === name.toLowerCase())?.id;
+  const plates = soleplateOptions(input.soleplate);
   const attributes = [
     input.sizes.length && { ...(attrId('Chọn Size') ? { id: attrId('Chọn Size') } : { name: 'Chọn Size' }), options: input.sizes, visible: true },
-    input.soleplate && { ...(attrId('Loại Đinh') ? { id: attrId('Loại Đinh') } : { name: 'Loại Đinh' }), options: [input.soleplate], visible: true },
+    plates.length && { ...(attrId('Loại Đinh') ? { id: attrId('Loại Đinh') } : { name: 'Loại Đinh' }), options: plates, visible: true },
   ].filter(Boolean);
 
   const brand = await detectBrand(input.name);
@@ -231,6 +275,7 @@ export async function createDraftProduct(input: DraftInput): Promise<DraftResult
     type: 'simple',
     sku: input.sku ?? undefined,
     regular_price: input.price ? String(input.price) : undefined,
+    sale_price: input.sale_price && input.price && input.sale_price < input.price ? String(input.sale_price) : undefined,
     slug: input.slug,
     description: input.description_html,
     short_description: input.short_description_html,

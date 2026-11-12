@@ -1,12 +1,14 @@
 'use client';
 
 import { useActionState, useEffect, useState, useTransition } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { ProductOutput, ProductType, ResearchResult, SpecField } from '@app/products';
 import { applyFacts, deleteProduct, pushDraft, regenerate, research, saveOutputEdit, setCategories, updateSpec } from '../actions';
 import { BasicFields, SpecInputs } from '../spec-fields';
 
-export type CategoryOption = { id: number; path: string };
+import type { CategoryOption } from "@/lib/categories";
+export type { CategoryOption };
 
 export type ProductView = {
   id: string;
@@ -14,6 +16,10 @@ export type ProductView = {
   name: string;
   sku: string | null;
   price: number | null;
+  sale_price: number | null;
+  color: string | null;
+  batch_id: string | null;
+  batch_name: string | null;
   sizes: string[];
   spec: Record<string, string>;
   notes: string | null;
@@ -116,6 +122,11 @@ export function Workspace({
         <span className="badge">{typeLabel}</span>
         {p.sku && <span className="badge">{p.sku}</span>}
       </div>
+      {p.batch_id && (
+        <p className="meta">
+          Thuộc lô nhiều màu: <Link href={`/products/batch/${p.batch_id}`}>{p.batch_name ?? 'xem lô'}</Link> — sửa thông số chung ở trang lô để áp cho mọi màu.
+        </p>
+      )}
 
       {busy && (
         <div className="card status-line">
@@ -151,7 +162,7 @@ export function Workspace({
               >
                 🔎 Tìm trên web theo tên & mã
               </button>
-              <span className="meta">~$0.03–0.05 mỗi lần · chỉ dùng khi phiếu còn thiếu</span>
+              <span className="meta">~$0.15–0.2 mỗi lần · chỉ dùng khi phiếu còn thiếu</span>
             </div>
             {p.research && (
               <form action={doApply} className="settings">
@@ -296,7 +307,7 @@ export function Workspace({
                     >
                       Tạo bản nháp trên WooCommerce
                     </button>
-                    <span className="meta">Điền sẵn: tên, SKU, giá, size, loại đinh, mô tả, tags, danh mục, Yoast. Ảnh tải trên WordPress.</span>
+                    <span className="meta">Điền sẵn: tên, SKU, giá (+ giá KM), size, loại đinh, hãng, mô tả, tags, danh mục, Yoast. Ảnh tải trên WordPress.</span>
                   </div>
                 )}
               </div>

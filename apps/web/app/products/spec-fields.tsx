@@ -3,7 +3,35 @@
 import type { SpecField } from '@app/products';
 
 /** Các ô của phiếu nhập — dùng chung cho form tạo mới và form sửa phiếu. */
-export function BasicFields({ initial }: { initial?: { name?: string; sku?: string | null; price?: number | null; sizes?: string[] } }) {
+type Basics = {
+  name?: string;
+  sku?: string | null;
+  color?: string | null;
+  price?: number | null;
+  sale_price?: number | null;
+  sizes?: string[];
+};
+
+function PriceSizeFields({ initial }: { initial?: Basics }) {
+  return (
+    <>
+      <label>
+        Giá bán (đ)
+        <input name="price" inputMode="numeric" defaultValue={initial?.price ?? ''} placeholder="vd 2900000" />
+      </label>
+      <label>
+        Giá khuyến mãi (đ)
+        <input name="sale_price" inputMode="numeric" defaultValue={initial?.sale_price ?? ''} placeholder="để trống nếu không giảm" />
+      </label>
+      <label>
+        Size
+        <input name="sizes" defaultValue={initial?.sizes?.join(', ') ?? ''} placeholder="vd 39, 40, 40.5, 41" />
+      </label>
+    </>
+  );
+}
+
+export function BasicFields({ initial }: { initial?: Basics }) {
   return (
     <div className="source-fields">
       <label className="wide-field">
@@ -15,13 +43,23 @@ export function BasicFields({ initial }: { initial?: { name?: string; sku?: stri
         <input name="sku" defaultValue={initial?.sku ?? ''} placeholder="vd FQ8687-446" />
       </label>
       <label>
-        Giá bán (đ)
-        <input name="price" inputMode="numeric" defaultValue={initial?.price ?? ''} placeholder="vd 2900000" />
+        Phối màu
+        <input name="color" defaultValue={initial?.color ?? ''} placeholder="vd trắng/ xanh blue" />
       </label>
-      <label>
-        Size
-        <input name="sizes" defaultValue={initial?.sizes?.join(', ') ?? ''} placeholder="vd 39, 40, 40.5, 41" />
+      <PriceSizeFields initial={initial} />
+    </div>
+  );
+}
+
+/** Ô chung của một lô nhiều màu: tên chung + giá / size mặc định (từng màu có thể ghi đè). */
+export function BatchBasicFields({ initial }: { initial?: Basics & { base_name?: string } }) {
+  return (
+    <div className="source-fields">
+      <label className="wide-field">
+        Tên chung của mẫu *
+        <input name="base_name" required defaultValue={initial?.base_name ?? ''} placeholder="vd Kelme Stazzle 1.0.1 TF (không ghi màu, không ghi mã)" />
       </label>
+      <PriceSizeFields initial={initial} />
     </div>
   );
 }

@@ -7,6 +7,8 @@ try {
 
 const config: NextConfig = {
   transpilePackages: ['@app/core', '@app/connectors', '@app/products'],
+  // Up ảnh: mỗi lần gửi một ảnh đã thu nhỏ (~150–400KB); để dư cho ảnh nhiều chi tiết
+  experimental: { serverActions: { bodySizeLimit: '4mb' } },
 };
 
 export default config;

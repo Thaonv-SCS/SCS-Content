@@ -8,7 +8,7 @@ import { categoryPath, exampleToText, renderParagraphs, renderSpecTable, slugify
 import { SPEC_FIELDS, type ProductOutput, type ProductType, type ResearchFact, type ResearchResult } from './types.ts';
 import { fetchBrands, matchBrand, type Brand, type WooCategory } from './woo.ts';
 
-export const PRODUCT_PROMPT_VERSION = 'product-v2';
+export const PRODUCT_PROMPT_VERSION = 'product-v3';
 
 /** Danh mục dòng: nằm trong cây "Bộ Sưu Tập", hoặc tên chứa tên hãng (vd "Puma Future", "Kamito"). */
 function isLineCategory(c: WooCategory, categories: Map<number, WooCategory>, brands: Brand[]): boolean {
@@ -25,11 +25,11 @@ function surfaceCategories(product: ProductRow, categories: Map<number, WooCateg
   const slugs = { TF: ['giay-co-nhan-tao'], AG: ['giay-co-nhan-tao'], FG: ['giay-co-tu-nhien'], SG: ['giay-co-tu-nhien'], MG: ['giay-co-nhan-tao', 'giay-co-tu-nhien'] }[plate] ?? [];
   return [...categories.values()].filter((c) => slugs.includes(c.slug));
 }
-const WRITE_MODEL = process.env.WRITE_MODEL || 'claude-opus-5-5';
+export const WRITE_MODEL = process.env.WRITE_MODEL || 'claude-opus-5-5';
 const PARSE_MODEL = process.env.CLASSIFY_MODEL || 'claude-haiku-5-5';
 const MAX_LINKS = 4;
 
-const anthropic = new Anthropic();
+export const anthropic = new Anthropic();
 
 export type ProductRow = {
   id: string;
@@ -42,19 +42,21 @@ export type ProductRow = {
   notes: string | null;
   output: ProductOutput | null;
   category_ids: number[];
+  color?: string | null;
+  batch_id?: string | null;
 };
 
 // ───────────── Chi phí ─────────────
 
 /** Trần chi phí ngày dùng chung với bản tin (đọc qua hàm SQL để nhân viên không cần quyền xem bảng chi phí). */
-async function assertBudget(db: SupabaseClient) {
+export async function assertBudget(db: SupabaseClient) {
   const [{ data: spent }, { data: limit }] = await Promise.all([db.rpc('ai_spent_today'), db.rpc('ai_daily_budget')]);
   if (Number(spent) >= Number(limit)) {
     throw new Error(`Đã chạm trần chi phí AI hôm nay ($${Number(limit).toFixed(2)}). Admin có thể nâng trần ở trang Cài đặt.`);
   }
 }
 
-async function recordCall(db: SupabaseClient, purpose: string, model: string, usage: TokenUsage, searches = 0) {
+export async function recordCall(db: SupabaseClient, purpose: string, model: string, usage: TokenUsage, searches = 0) {
   await db.from('llm_calls').insert({
     purpose,
     model,
@@ -125,6 +127,8 @@ type ExampleRow = {
   tags: string[];
   is_gold: boolean;
   modified_at: string | null;
+  /** Bài viết trong app đã được duyệt và đẩy lên web (văn phong mới nhất của shop). */
+  approved?: boolean;
 };
 
 const GENERIC = new Set(['giay', 'bong', 'da', 'tf', 'fg', 'ag', 'ic', 'sg', 'mg', 'mau', 'pack', 'the', 'and', 'phoi']);
@@ -135,37 +139,98 @@ const words = (s: string) =>
       .filter((w) => w.length >= 2 && !GENERIC.has(w) && !/^\d{4,}$/.test(w)),
   );
 
-/** Chọn mẫu gần nhất: trùng nhiều chữ trong tên (hãng, dòng, phân khúc), ưu tiên mẫu chuẩn và bài mới. */
-function pickExamples(examples: ExampleRow[], productName: string, n = 4): ExampleRow[] {
-  const target = words(productName);
+/** Chọn mẫu gần nhất: trùng nhiều chữ trong tên (hãng, dòng, phân khúc), ưu tiên mẫu chuẩn, bài đã duyệt và bài mới. */
+function pickExamples(examples: ExampleRow[], product: ProductRow, n = 4): ExampleRow[] {
+  const target = words(product.name);
+  const ownSku = product.sku?.toLowerCase();
   return examples
     .filter((e) => e.description_html && e.description_html.length > 500)
+    .filter((e) => !ownSku || e.sku?.toLowerCase() !== ownSku) // không lấy chính sản phẩm này làm mẫu
     .map((e) => {
       const shared = [...words(e.name)].filter((w) => target.has(w)).length;
       const ageDays = e.modified_at ? (Date.now() - new Date(e.modified_at).getTime()) / 86400_000 : 999;
-      return { e, score: shared * 2 + (e.is_gold ? 3 : 0) + Math.max(0, 1 - ageDays / 365) };
+      return { e, score: shared * 2 + (e.is_gold ? 3 : 0) + (e.approved ? 2 : 0) + Math.max(0, 1 - ageDays / 365) };
     })
     .sort((a, b) => b.score - a.score)
     .slice(0, n)
     .map((x) => x.e);
 }
 
-export async function generateProduct(db: SupabaseClient, product: ProductRow, instruction?: string): Promise<ProductOutput> {
-  await assertBudget(db);
-
-  const [{ data: cats }, { data: examples }] = await Promise.all([
-    db.from('woo_categories').select('id,name,slug,parent,link,count'),
+/**
+ * Kho mẫu = sản phẩm trên web + bài trong app đã đẩy lên web. Bài đã đẩy mà web cũng có (trùng mã)
+ * thì dùng bản trên web (có thể đã được sửa thêm trên WordPress) nhưng vẫn tính là "đã duyệt".
+ */
+async function loadExamples(db: SupabaseClient): Promise<ExampleRow[]> {
+  const [{ data: web }, { data: pushed }] = await Promise.all([
     db
       .from('product_examples')
       .select('name,sku,short_description,description_html,yoast_title,yoast_meta,tags,is_gold,modified_at')
       .order('modified_at', { ascending: false })
       .limit(400),
+    db.from('products').select('name,sku,output,pushed_at').not('pushed_at', 'is', null).order('pushed_at', { ascending: false }).limit(60),
+  ]);
+  const webRows = (web as ExampleRow[] | null) ?? [];
+  const pushedRows = (pushed ?? []) as { name: string; sku: string | null; output: ProductOutput | null; pushed_at: string }[];
+  const approvedSkus = new Set(pushedRows.flatMap((p) => (p.sku ? [p.sku.toLowerCase()] : [])));
+  const webSkus = new Set(webRows.flatMap((e) => (e.sku ? [e.sku.toLowerCase()] : [])));
+  return [
+    ...webRows.map((e) => ({ ...e, approved: !!e.sku && approvedSkus.has(e.sku.toLowerCase()) })),
+    ...pushedRows
+      .filter((p) => p.output && !(p.sku && webSkus.has(p.sku.toLowerCase())))
+      .map((p) => ({
+        name: p.name,
+        sku: p.sku,
+        short_description: p.output!.short_description_html,
+        description_html: p.output!.description_html,
+        yoast_title: p.output!.seo_title,
+        yoast_meta: p.output!.meta_description,
+        tags: p.output!.tags,
+        is_gold: false,
+        modified_at: p.pushed_at,
+        approved: true,
+      })),
+  ];
+}
+
+/** Bài các màu khác trong cùng lô đã viết — đưa cho AI để tránh lặp câu chữ (Google không thích nội dung trùng). */
+async function loadSiblings(db: SupabaseClient, product: ProductRow): Promise<{ name: string; text: string }[]> {
+  if (!product.batch_id) return [];
+  // Lô nhập Excel = các sản phẩm khác nhau, không phải các màu của cùng mẫu
+  const { data: batch } = await db.from('product_batches').select('kind').eq('id', product.batch_id).maybeSingle();
+  if (batch?.kind === 'import') return [];
+  const { data } = await db
+    .from('products')
+    .select('id,name,output')
+    .eq('batch_id', product.batch_id)
+    .neq('id', product.id)
+    .not('output', 'is', null)
+    .order('created_at')
+    .limit(6);
+  return ((data ?? []) as { name: string; output: ProductOutput }[]).map((s) => ({
+    name: s.name,
+    text: exampleToText(`${s.output.short_description_html}\n${s.output.description_html.replace(/<table[\s\S]*?<\/table>/i, '')}`, 1500),
+  }));
+}
+
+export async function loadStyleNotes(db: SupabaseClient): Promise<string> {
+  const { data } = await db.from('product_style').select('notes').eq('id', 1).maybeSingle();
+  return (data?.notes as string | undefined)?.trim() ?? '';
+}
+
+export async function generateProduct(db: SupabaseClient, product: ProductRow, instruction?: string): Promise<ProductOutput> {
+  await assertBudget(db);
+
+  const [{ data: cats }, examples, siblings, styleNotes] = await Promise.all([
+    db.from('woo_categories').select('id,name,slug,parent,link,count'),
+    loadExamples(db),
+    loadSiblings(db, product),
+    loadStyleNotes(db),
   ]);
   const categories = new Map((cats as WooCategory[] | null ?? []).map((c) => [c.id, c]));
   if (!categories.size) throw new Error('Chưa có danh mục từ website — admin bấm "Đồng bộ dữ liệu website" trước.');
 
   const fields = SPEC_FIELDS[product.type];
-  const picked = pickExamples((examples as ExampleRow[] | null) ?? [], product.name);
+  const picked = pickExamples(examples, product);
 
   // Đích link do code quyết định; AI chỉ chọn chữ gắn link
   const brands = await fetchBrands().catch(() => [] as Brand[]);
@@ -187,7 +252,11 @@ export async function generateProduct(db: SupabaseClient, product: ProductRow, i
     lineCats.map((c) => `${c.id} | ${categoryPath(c, categories)}`).join('\n') +
     `\nTrang hãng (khóa brand): ${brand ? `${brand.name} — chỉ dùng khi không có danh mục đúng dòng` : 'không có — không dùng brand'}` +
     `\nDanh mục loại sân: ${surfaces.length ? surfaces.map((c) => `${c.id} | ${c.name}`).join('; ') : 'không có — không link loại sân'}` +
-    `\n\n## Phiếu nhập sản phẩm cần viết\nLoại: ${product.type}\nTên sản phẩm: ${product.name}\nMã: ${product.sku ?? '(không có)'}\nGiá: ${product.price ?? '—'}\n` +
+    (siblings.length
+      ? `\n\n## Bài của các màu khác trong cùng lô (đã viết)\nSản phẩm cần viết là một MÀU KHÁC của cùng mẫu. Bảng thông số được phép giống, nhưng mô tả ngắn, câu mở bài và các đoạn văn phải viết KHÁC: đổi cách mở bài, nhấn vào phối màu riêng của màu này, không chép lại câu nào dưới đây.\n` +
+        siblings.map((s) => `### ${s.name}\n${s.text}`).join('\n\n')
+      : '') +
+    `\n\n## Phiếu nhập sản phẩm cần viết\nLoại: ${product.type}\nTên sản phẩm: ${product.name}\nMã: ${product.sku ?? '(không có)'}\nPhối màu: ${product.color?.trim() || '(xem trong tên)'}\nGiá: ${product.price ?? '—'}\n` +
     `Các dòng bảng thông số (theo thứ tự):\n` +
     fields.map((f, i) => `${i + 1}. ${f.label}: ${product.spec[f.key]?.trim() || '(trống)'}`).join('\n') +
     `\nÝ chính khác: ${product.notes?.trim() || '(không có)'}` +
@@ -200,7 +269,18 @@ export async function generateProduct(db: SupabaseClient, product: ProductRow, i
     max_tokens: 16000,
     betas: ['server-side-fallback-2026-07-01'],
     fallbacks: 'default',
-    system: [{ type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } }],
+    system: [
+      { type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } },
+      ...(styleNotes
+        ? [
+            {
+              type: 'text' as const,
+              text: `GHI CHÚ VĂN PHONG — rút ra từ các bài admin đã sửa tay. Ưu tiên tuân theo các luật này hơn cả mẫu:\n${styleNotes}`,
+              cache_control: { type: 'ephemeral' as const },
+            },
+          ]
+        : []),
+    ],
     output_config: { format: betaZodOutputFormat(OutputSchema), effort: 'medium' },
     messages: [{ role: 'user', content: body }],
   });
@@ -276,7 +356,8 @@ export async function researchProduct(db: SupabaseClient, product: ProductRow): 
       max_tokens: 16000,
       betas: ['server-side-fallback-2026-07-01'],
       fallbacks: 'default',
-      tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 4 }],
+      // 3 lượt tìm là đủ cho thông số một sản phẩm; mỗi lượt kéo theo nhiều chữ AI phải đọc (chi phí chính)
+      tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 3 }],
       output_config: { effort: 'low' },
       messages,
     });

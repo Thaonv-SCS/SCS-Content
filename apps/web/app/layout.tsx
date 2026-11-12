@@ -1,36 +1,38 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { supabaseServer } from '@/lib/supabase';
+import { currentUser } from '@/lib/auth';
 import { signOut } from './auth-actions';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Bản tin ý tưởng',
-  description: 'Tổng hợp ý tưởng content giày & bóng đá mỗi ngày',
+  title: 'Soccerstore Content',
+  description: 'Bản tin ý tưởng content và viết nội dung sản phẩm',
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await supabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const me = await currentUser();
 
   return (
     <html lang="vi">
       <body>
         <header>
-          <strong>⚽ Bản tin ý tưởng</strong>
-          {user && (
+          <strong>⚽ Soccerstore Content</strong>
+          {me?.role === 'admin' && (
             <>
               <Link href="/">Bản tin</Link>
+              <Link href="/products">Post sản phẩm</Link>
               <Link href="/captions">Kho caption</Link>
               <Link href="/raw">Bài thô</Link>
               <Link href="/sources">Nguồn</Link>
               <Link href="/settings">Cài đặt</Link>
-              <form action={signOut} className="spacer">
-                <button type="submit" className="link">Đăng xuất</button>
-              </form>
             </>
+          )}
+          {me?.role === 'staff' && <Link href="/products">Post sản phẩm</Link>}
+          {me && (
+            <form action={signOut} className="spacer">
+              <span className="meta">{me.email} </span>
+              <button type="submit" className="link">Đăng xuất</button>
+            </form>
           )}
         </header>
         <main>{children}</main>

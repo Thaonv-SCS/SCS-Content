@@ -5,6 +5,7 @@ export * from './types.ts';
 export * from './normalize.ts';
 export * from './scoring.ts';
 export * from './settings.ts';
+export * from './pricing.ts';
 export * from './catalog/index.ts';
 
 /** Danh sách nguồn ban đầu. Khi đã có Supabase, bảng `sources` là nguồn sự thật; file này chỉ để seed. */

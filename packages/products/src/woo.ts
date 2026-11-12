@@ -5,11 +5,38 @@
  */
 
 export const WOO_URL = (process.env.WOO_URL || 'https://soccerstore.vn').replace(/\/+$/, '');
-const UA = { 'User-Agent': 'Mozilla/5.0 (compatible; SoccerstoreContentApp/0.1)' };
+/**
+ * Header gửi kèm mọi request tới web. SITE_ACCESS_TOKEN = mã bí mật để Cloudflare nhận ra app và cho đi qua
+ * (luật WAF: header X-Content-App đúng mã → Skip). Máy chủ Netlify bị Cloudflare coi là "máy lạ" nên cần mã này.
+ */
+export function siteHeaders(): Record<string, string> {
+  const token = process.env.SITE_ACCESS_TOKEN?.trim();
+  return { 'User-Agent': 'Mozilla/5.0 (compatible; SoccerstoreContentApp/0.1)', ...(token ? { 'X-Content-App': token } : {}) };
+}
+
+/** Bị chặn (403 / 429 / 503) thì đoán bên nào chặn: Cloudflare hay máy chủ web phía sau — để biết sửa ở đâu. */
+export function blockedHint(res: Response, body: string): string {
+  if (![403, 429, 503].includes(res.status)) return '';
+  const mitigated = res.headers.get('cf-mitigated');
+  const ray = res.headers.get('cf-ray');
+  const title = body.match(/<title>([^<]*)/i)?.[1]?.trim();
+  const who = mitigated
+    ? `Cloudflare chặn (${mitigated})`
+    : /Apache|nginx|LiteSpeed|Wordfence|Imunify/i.test(body)
+      ? 'máy chủ web chặn (không phải Cloudflare)'
+      : /cloudflare|Attention Required|Just a moment/i.test(body + (title ?? ''))
+        ? 'Cloudflare chặn'
+        : 'chưa rõ bên nào chặn';
+  const token = process.env.SITE_ACCESS_TOKEN?.trim() ? 'có gửi mã SITE_ACCESS_TOKEN' : 'CHƯA có SITE_ACCESS_TOKEN';
+  return ` — ${who}${title ? `, trang "${title}"` : ''}${ray ? `, Ray ID ${ray}` : ''}, ${token}`;
+}
 
 async function getJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { headers: UA, signal: AbortSignal.timeout(30_000) });
-  if (!res.ok) throw new Error(`HTTP ${res.status} ${url}`);
+  const res = await fetch(url, { headers: siteHeaders(), signal: AbortSignal.timeout(30_000) });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`HTTP ${res.status} ${url}${blockedHint(res, body)}`);
+  }
   return (await res.json()) as T;
 }
 
@@ -149,14 +176,17 @@ function wcAuth(): string {
 async function wcRaw<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<{ data: T; headers: Headers }> {
   const res = await fetch(`${WOO_URL}/wp-json/wc/v3${path}`, {
     method,
-    headers: { ...UA, Authorization: wcAuth(), 'Content-Type': 'application/json' },
+    headers: { ...siteHeaders(), Authorization: wcAuth(), 'Content-Type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
     signal: AbortSignal.timeout(60_000),
   });
-  const data = (await res.json().catch(() => null)) as T & { message?: string };
-  if (!res.ok) {
-    const hint = res.status === 403 && !data?.message ? ' (có thể bị Cloudflare chặn)' : '';
-    throw new Error(`WooCommerce ${res.status}: ${data?.message ?? 'lỗi không rõ'}${hint}`);
+  const text = await res.text().catch(() => '');
+  let data: (T & { message?: string }) | null = null;
+  try {
+    data = JSON.parse(text) as T & { message?: string };
+  } catch {}
+  if (!res.ok || data === null) {
+    throw new Error(`WooCommerce ${res.status}: ${data?.message ?? 'lỗi không rõ'}${data?.message ? '' : blockedHint(res, text)}`);
   }
   return { data, headers: res.headers };
 }

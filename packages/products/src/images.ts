@@ -4,9 +4,9 @@
  * Up ảnh cần Mật khẩu ứng dụng WordPress (WP_APP_USER / WP_APP_PASSWORD) — khóa WooCommerce không có quyền up.
  * Không đụng ảnh thumb (ảnh chính) của sản phẩm.
  */
-import { WOO_URL, wc } from './woo.ts';
+import { WOO_URL, blockedHint, siteHeaders, wc } from './woo.ts';
 
-const UA = { 'User-Agent': 'Mozilla/5.0 (compatible; SoccerstoreContentApp/0.1)' };
+
 
 function wpAuth(): string {
   const user = process.env.WP_APP_USER?.trim();
@@ -31,19 +31,22 @@ export async function uploadMedia(file: Blob, filename: string, alt: string, pro
   fd.append('post', String(productId));
   const res = await fetch(`${WOO_URL}/wp-json/wp/v2/media`, {
     method: 'POST',
-    headers: { ...UA, Authorization: wpAuth() },
+    headers: { ...siteHeaders(), Authorization: wpAuth() },
     body: fd,
     signal: AbortSignal.timeout(60_000),
   });
-  const j = (await res.json().catch(() => null)) as {
+  const text = await res.text().catch(() => '');
+  let j: {
     id?: number;
     source_url?: string;
     media_details?: { width?: number; height?: number; sizes?: Record<string, { source_url: string; width: number; height: number }> };
     message?: string;
-  } | null;
+  } | null = null;
+  try {
+    j = JSON.parse(text);
+  } catch {}
   if (!res.ok || !j?.id) {
-    const hint = res.status === 403 && !j?.message ? ' (có thể bị Cloudflare chặn)' : '';
-    throw new Error(`Up ảnh lỗi ${res.status}: ${j?.message ?? 'không rõ'}${hint}`);
+    throw new Error(`Up ảnh lỗi ${res.status}: ${j?.message ?? 'không rõ'}${j?.message ? '' : blockedHint(res, text)}`);
   }
   // Ảnh đã thu nhỏ còn 1024px → bản gốc chính là cỡ "large" mà trình soạn thảo hay chèn
   const large = j.media_details?.sizes?.large;

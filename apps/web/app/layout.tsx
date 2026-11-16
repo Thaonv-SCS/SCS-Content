@@ -23,6 +23,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <Link href="/products">Post sản phẩm</Link>
               <Link href="/stock">Tình trạng hàng</Link>
               <Link href="/images">Up ảnh</Link>
+              <Link href="/video">Video</Link>
               <Link href="/captions">Kho caption</Link>
               <Link href="/raw">Bài thô</Link>
               <Link href="/sources">Nguồn</Link>
@@ -36,6 +37,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <Link href="/images">Up ảnh</Link>
             </>
           )}
+          {me?.role !== 'admin' && !!me?.videoQuyen.length && <Link href="/video">Video</Link>}
           {me && (
             <form action={signOut} className="spacer">
               <span className="meta">{me.email} </span>

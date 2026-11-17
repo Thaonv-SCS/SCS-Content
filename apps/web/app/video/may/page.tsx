@@ -6,7 +6,7 @@ import { mayDangBat } from '@/lib/video';
 import { CaiDat, NutMay, QuyenNguoi, ThemMay } from './forms';
 
 const NHAN_NK: Record<string, string> = {
-  'tao': 'Thêm máy', 'chon-nhan-viec': 'Chọn nhận việc', 'thu-hoi': 'Thu hồi', 'bat': 'Máy bật',
+  'tao': 'Thêm máy', 'chon-nhan-viec': 'Bật nhận việc', 'bo-nhan-viec': 'Thôi nhận việc', 'thu-hoi': 'Thu hồi', 'bat': 'Máy bật',
   'tam-ngung': 'Tạm ngưng', 'bat-lai': 'Bật lại',
 };
 
@@ -54,7 +54,8 @@ export default async function MayWorkerPage() {
       <p><Link href="/video">← Video</Link></p>
       <h1>Máy worker</h1>
       <p className="muted">
-        Chỉ admin thấy trang này. Việc mới luôn giao cho máy đang <strong>nhận việc</strong>; nhân viên không thấy, không chọn được máy.
+        Chỉ admin thấy trang này. Bật <strong>nhận việc</strong> cho bao nhiêu máy cũng được: video mới <strong>tự giao cho máy đang chứa
+        footage</strong> (nhiều máy cùng có thì ưu tiên máy đang bật, ít việc, dựng nhanh). Nhân viên không chọn được máy.
         Máy không có chìa khóa do admin tạo thì không kết nối được.
       </p>
 
@@ -82,7 +83,9 @@ export default async function MayWorkerPage() {
                   <td>
                     {m.trang_thai !== 'thu-hoi' && (
                       <div className="row-actions">
-                        {m.trang_thai === 'hoat-dong' && !m.dang_nhan_viec && <NutMay may={m.id} hanhDong="chon" nhan="Chọn nhận việc" ghost={false} />}
+                        {m.trang_thai === 'hoat-dong' && (m.dang_nhan_viec
+                          ? <NutMay may={m.id} hanhDong="bo-nhan" nhan="Thôi nhận việc" hoi={`"${m.ten}" thôi nhận video MỚI? (video đang làm dở trên máy này vẫn chạy tiếp)`} />
+                          : <NutMay may={m.id} hanhDong="chon" nhan="Bật nhận việc" ghost={false} />)}
                         {m.trang_thai === 'hoat-dong'
                           ? <NutMay may={m.id} hanhDong="tam-ngung" nhan="Tạm ngưng" />
                           : <NutMay may={m.id} hanhDong="bat-lai" nhan="Bật lại" />}

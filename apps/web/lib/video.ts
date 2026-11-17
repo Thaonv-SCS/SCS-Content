@@ -60,3 +60,6 @@ export function mayDangBat(lanCuoi: string | null) {
 }
 
 export const usd = (n: number | null | undefined) => (n == null ? '—' : `$${Number(n).toFixed(2)}`);
+
+/** 1 thư mục footage + các máy đang chứa nó (từ hàm video_lua_chon). */
+export type Footage = { ten: string; o_dau: { may: string; bat: boolean }[]; bat: boolean };

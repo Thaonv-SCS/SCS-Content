@@ -115,6 +115,7 @@ export async function thaoTacMay(_: string | null, f: FormData): Promise<string 
   const may = s(f, 'may');
   switch (s(f, 'hanh_dong')) {
     case 'chon': return goiRpc('video_chon_may', { p_may: may }, '/video/may');
+    case 'bo-nhan': return goiRpc('video_bo_nhan_viec', { p_may: may }, '/video/may');
     case 'tam-ngung': return goiRpc('video_tam_ngung_may', { p_may: may, p_tam_ngung: true }, '/video/may');
     case 'bat-lai': return goiRpc('video_tam_ngung_may', { p_may: may, p_tam_ngung: false }, '/video/may');
     case 'thu-hoi': return goiRpc('video_thu_hoi_may', { p_may: may }, '/video/may');
@@ -134,6 +135,14 @@ export async function datTrangThai(_: string | null, f: FormData): Promise<strin
   if (denied) return denied;
   const job = s(f, 'job');
   return goiRpc('video_dat_trang_thai', { p_job: job, p_trang_thai: s(f, 'trang_thai'), p_ly_do: s(f, 'ly_do') || 'Admin chạy lại' }, `/video/${job}`);
+}
+
+/** Admin: chuyển 1 video sang máy khác (máy mới phải có footage đó; video làm lại từ dàn ý). */
+export async function chuyenMay(_: string | null, f: FormData): Promise<string | null> {
+  const denied = await can('admin');
+  if (denied) return denied;
+  const job = s(f, 'job');
+  return goiRpc('video_chuyen_may', { p_job: job, p_may: s(f, 'may') }, `/video/${job}`);
 }
 
 export async function luuCaiDat(_: string | null, f: FormData): Promise<string | null> {

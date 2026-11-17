@@ -6,7 +6,7 @@ import { supabaseServer } from '@/lib/supabase';
 import { mayDangLam, nhanTrangThai, usd } from '@/lib/video';
 import { Markdown } from '../markdown';
 import { TuLamMoi } from '../tu-lam-moi';
-import { AdminChayLai, DuyetDanY, DuyetThe, GopYChot, HuyViec, XongCanhTram } from './khung-duyet';
+import { AdminChayLai, AdminChuyenMay, DuyetDanY, DuyetThe, GopYChot, HuyViec, XongCanhTram } from './khung-duyet';
 import { TaiCanhTram } from './tai-canh-tram';
 
 type SuKien = { id: number; loai: string; noi_dung: Record<string, any>; nguoi: string | null; created_at: string };
@@ -52,6 +52,12 @@ export default async function VideoChiTiet({ params }: { params: Promise<{ id: s
     ])
     : [{ data: null }, { data: null }];
   const tongChiPhi = (chiPhi ?? []).reduce((t, r) => t + Number(r.cost_usd), 0);
+  // admin: máy khác đang hoạt động + có footage này (để chuyển máy khi máy đang làm hỏng)
+  const { data: mayKhac } = admin
+    ? await supabase.from('video_workers').select('id,ten,footage').eq('trang_thai', 'hoat-dong')
+    : { data: null };
+  const chuyenDuoc = ((mayKhac ?? []) as { id: string; ten: string; footage: string[] }[])
+    .filter((m) => m.id !== v.worker_id && m.footage.includes(v.footage)).map(({ id: mid, ten: mten }) => ({ id: mid, ten: mten }));
 
   return (
     <>
@@ -125,6 +131,7 @@ export default async function VideoChiTiet({ params }: { params: Promise<{ id: s
             <>
               {loi?.chi_tiet && <pre className="run-log">{String(loi.chi_tiet).slice(-1500)}</pre>}
               <AdminChayLai job={id} />
+              {!!chuyenDuoc.length && <><span className="meta">Hoặc chuyển sang máy khác có footage này:</span><AdminChuyenMay job={id} may={chuyenDuoc} /></>}
             </>
           ) : <p className="meta">Báo admin xem giúp.</p>}
         </div>
@@ -137,7 +144,14 @@ export default async function VideoChiTiet({ params }: { params: Promise<{ id: s
       )}
 
       {admin && v.trang_thai !== 'loi' && (
-        <details className="card"><summary className="meta">Admin: đặt lại bước</summary><AdminChayLai job={id} /></details>
+        <details className="card"><summary className="meta">Admin: đặt lại bước / chuyển máy</summary>
+          <div className="settings wide">
+            <AdminChayLai job={id} />
+            {chuyenDuoc.length
+              ? <><span className="meta">Chuyển sang máy khác có footage này (làm lại từ dàn ý):</span><AdminChuyenMay job={id} may={chuyenDuoc} /></>
+              : <span className="meta">Không máy nào khác có thư mục footage "{v.footage}" để chuyển.</span>}
+          </div>
+        </details>
       )}
 
       {/* ───── Lịch sử ───── */}

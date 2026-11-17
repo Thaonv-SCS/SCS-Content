@@ -1,7 +1,7 @@
 'use client';
 
 import { useActionState } from 'react';
-import { chot, datTrangThai, duyetDanY, duyetThe, gopY, huyViec, xongCanhTram } from '../actions';
+import { chot, chuyenMay, datTrangThai, duyetDanY, duyetThe, gopY, huyViec, xongCanhTram } from '../actions';
 
 function KetQua({ loi, pending }: { loi: string | null; pending: boolean }) {
   if (pending) return <span className="meta">Đang gửi…</span>;
@@ -114,6 +114,21 @@ export function HuyViec({ job }: { job: string }) {
       <input type="hidden" name="job" value={job} />
       <input name="ly_do" placeholder="lý do hủy (không bắt buộc)" style={{ width: 240, marginTop: 0 }} />
       <button type="submit" className="ghost danger" disabled={pending}>✕ Hủy video</button>
+      <KetQua loi={loi} pending={pending} />
+    </form>
+  );
+}
+
+/** Admin: chuyển video sang máy khác (vd máy đang làm bị hỏng). Máy mới phải có thư mục footage. */
+export function AdminChuyenMay({ job, may }: { job: string; may: { id: string; ten: string }[] }) {
+  const [loi, action, pending] = useActionState(chuyenMay, null);
+  if (!may.length) return null;
+  return (
+    <form action={action} className="inline wrap"
+      onSubmit={(e) => { if (!confirm('Chuyển sang máy khác? Video sẽ làm lại từ dàn ý trên máy mới (ý kiến duyệt cũ vẫn giữ).')) e.preventDefault(); }}>
+      <input type="hidden" name="job" value={job} />
+      <select name="may" style={{ width: 'auto' }}>{may.map((m) => <option key={m.id} value={m.id}>{m.ten}</option>)}</select>
+      <button type="submit" className="ghost" disabled={pending}>Chuyển máy</button>
       <KetQua loi={loi} pending={pending} />
     </form>
   );

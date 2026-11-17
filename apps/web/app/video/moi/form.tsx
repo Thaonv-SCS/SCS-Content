@@ -3,9 +3,10 @@
 import { useActionState, useState } from 'react';
 import { BUOC, MO_HINH, UOC_TINH, usd } from '@/lib/video';
 import { taoViec } from '../actions';
+import type { Footage } from '@/lib/video';
 
 export function TaoViecForm({ footage, phongCach, daDung }: {
-  footage: string[]; phongCach: { ten: string; rieng: boolean }[]; daDung: string[];
+  footage: Footage[]; phongCach: { ten: string; rieng: boolean }[]; daDung: string[];
 }) {
   const [loi, action, pending] = useActionState(taoViec, null);
   const [chon, setChon] = useState<Record<string, string>>(Object.fromEntries(BUOC.map((b) => [b.ma, b.macDinh])));
@@ -24,9 +25,14 @@ export function TaoViecForm({ footage, phongCach, daDung }: {
           if (ten && !ten.value) ten.value = goiYTen(e.currentTarget.value);
         }}>
           <option value="" disabled>— chọn —</option>
-          {footage.map((f) => <option key={f} value={f}>{f}{daDung.includes(f) ? ' (đã từng tạo video)' : ''}</option>)}
+          {footage.map((f) => (
+            <option key={f.ten} value={f.ten}>
+              {f.ten} — {f.o_dau.map((o) => `${o.may}${o.bat ? '' : ' (đang tắt)'}`).join(', ')}{daDung.includes(f.ten) ? ' · đã từng tạo video' : ''}
+            </option>
+          ))}
         </select>
-        {!footage.length && <span className="warn">Máy dựng chưa báo thư mục footage nào (máy tắt hoặc chưa chép footage).</span>}
+        <span className="meta">Sau tên footage là máy đang chứa nó — video sẽ do máy đó dựng.</span>
+        {!footage.length && <span className="warn">Chưa máy dựng nào báo thư mục footage (máy tắt hoặc chưa chép footage).</span>}
       </label>
       <label>
         <strong>Tên video</strong>

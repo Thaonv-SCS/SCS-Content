@@ -10,11 +10,38 @@ const NHAN_NK: Record<string, string> = {
   'tam-ngung': 'Tạm ngưng', 'bat-lai': 'Bật lại',
 };
 
+type CauHinhMay = {
+  cpu?: string; so_nhan?: number; ram_gb?: number; card?: string; ma_hoa?: string; nhanh_hon_cpu?: number;
+  giai_ma_cuda?: boolean; uoc_phut_dung?: number; thu_muc_footage?: string; thu_muc_du_an?: string;
+  o_trong_gb?: number; thieu?: string[]; kiem_luc?: string;
+};
+
+/** Cấu hình máy do cong-cu/kiem-tra-may.py đo, máy gửi lên mỗi lần báo "đang bật". */
+function CauHinh({ ch, soFootage, rieng }: { ch: CauHinhMay; soFootage: number; rieng: string[] }) {
+  if (!ch.kiem_luc) {
+    return <span className="warn">Chưa chạy "Kiểm tra máy" (python cong-cu/kiem-tra-may.py) · {soFootage} thư mục footage</span>;
+  }
+  return (
+    <div className="cau-hinh">
+      <div>{ch.cpu} · {ch.so_nhan} luồng · RAM {ch.ram_gb} GB</div>
+      <div>Card: {ch.card || '—'}</div>
+      <div>Dựng bằng <strong>{ch.ma_hoa}</strong>{ch.nhanh_hon_cpu && ch.nhanh_hon_cpu > 1.05 ? ` (nhanh gấp ${ch.nhanh_hon_cpu} lần CPU)` : ''}
+        {' '}· ước tính <strong>~{ch.uoc_phut_dung} phút</strong>/video</div>
+      <div>Footage: <code>{ch.thu_muc_footage}</code> ({soFootage} thư mục)</div>
+      <div>Dự án: <code>{ch.thu_muc_du_an}</code></div>
+      <div className={(ch.o_trong_gb ?? 999) < 100 ? 'warn' : ''}>Ổ còn trống {ch.o_trong_gb} GB{(ch.o_trong_gb ?? 999) < 100 ? ' — ít, nên ≥ 100 GB' : ''}</div>
+      {!!rieng.length && <div>Phong cách riêng: {rieng.join(', ')}</div>}
+      {!!ch.thieu?.length && <div className="warn">Còn thiếu: {ch.thieu.join('; ')}</div>}
+      <div>kiểm tra lúc {ch.kiem_luc}</div>
+    </div>
+  );
+}
+
 export default async function MayWorkerPage() {
   await requireAdmin();
   const supabase = await supabaseServer();
   const [{ data: may }, { data: nk }, { data: nguoi }, { data: cd }] = await Promise.all([
-    supabase.from('video_workers').select('id,ten,trang_thai,dang_nhan_viec,phien_ban,lan_cuoi,footage,phong_cach,created_at').order('created_at'),
+    supabase.from('video_workers').select('id,ten,trang_thai,dang_nhan_viec,phien_ban,lan_cuoi,footage,phong_cach,cau_hinh,created_at').order('created_at'),
     supabase.from('video_worker_nhat_ky').select('id,worker_id,su_kien,chi_tiet,created_at').order('id', { ascending: false }).limit(40),
     supabase.rpc('video_ds_nguoi'),
     supabase.from('settings').select('key,value').in('key', ['video_tran_ngay_usd', 'video_phien_ban_toi_thieu', 'video_giu_ban_xem_ngay']),
@@ -33,7 +60,7 @@ export default async function MayWorkerPage() {
 
       <div className="card scroll">
         <table>
-          <thead><tr><th>Máy</th><th>Tình trạng</th><th>Code</th><th>Footage</th><th></th></tr></thead>
+          <thead><tr><th>Máy</th><th>Tình trạng</th><th>Code</th><th>Cấu hình &amp; thư mục</th><th></th></tr></thead>
           <tbody>
             {(may ?? []).map((m) => {
               const bat = mayDangBat(m.lan_cuoi);
@@ -50,11 +77,8 @@ export default async function MayWorkerPage() {
                       : <span className="warn">{m.trang_thai === 'thu-hoi' ? 'đã thu hồi' : 'tạm ngưng'}</span>}
                   </td>
                   <td>{m.phien_ban ?? '—'}</td>
-                  <td className="meta">
-                    {(m.footage as string[]).length} thư mục
-                    {(m.phong_cach as { ten: string; rieng: boolean }[]).some((p) => p.rieng) &&
-                      <div>phong cách riêng: {(m.phong_cach as { ten: string; rieng: boolean }[]).filter((p) => p.rieng).map((p) => p.ten).join(', ')}</div>}
-                  </td>
+                  <td className="meta"><CauHinh ch={(m.cau_hinh ?? {}) as CauHinhMay} soFootage={(m.footage as string[]).length}
+                    rieng={(m.phong_cach as { ten: string; rieng: boolean }[]).filter((p) => p.rieng).map((p) => p.ten)} /></td>
                   <td>
                     {m.trang_thai !== 'thu-hoi' && (
                       <div className="row-actions">

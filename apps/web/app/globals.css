@@ -168,3 +168,5 @@ a.video-cho { display: flex; gap: 10px; align-items: center; color: var(--text);
 .the-duyet { width: 100%; max-width: 900px; border-radius: 6px; background: var(--border); }
 .video-xem { width: 100%; max-width: 360px; aspect-ratio: 9 / 16; background: #000; border-radius: 8px; }
 details > summary { cursor: pointer; }
+.cau-hinh { display: grid; gap: 2px; font-size: 13px; min-width: 260px; }
+.cau-hinh code { font-size: 12px; }

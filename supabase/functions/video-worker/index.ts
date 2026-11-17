@@ -50,6 +50,8 @@ Deno.serve(async (req) => {
       await db.from("video_workers").update({
         lan_cuoi: new Date().toISOString(), phien_ban: b.phien_ban ?? null,
         footage: b.footage ?? [], phong_cach: b.phong_cach ?? [],
+        // cấu hình máy (kiem-tra-may.py): chỉ ghi khi máy có gửi, để máy chạy code cũ không xóa mất
+        ...(b.cau_hinh && Object.keys(b.cau_hinh).length ? { cau_hinh: b.cau_hinh } : {}),
       }).eq("id", may.id);
       if (lauRoi) await db.from("video_worker_nhat_ky").insert({ worker_id: may.id, su_kien: "bat", chi_tiet: { phien_ban: b.phien_ban } });
       // dọn bản xem thử cũ (thỉnh thoảng)

@@ -3,7 +3,7 @@ import { requireAdmin } from '@/lib/auth';
 import { formatDateTime, timeAgo } from '@/lib/format';
 import { supabaseServer } from '@/lib/supabase';
 import { mayDangBat } from '@/lib/video';
-import { CaiDat, NutMay, QuyenNguoi, ThemMay } from './forms';
+import { CaiDat, NutMay, QuyenFootage, QuyenNguoi, ThemMay } from './forms';
 
 const NHAN_NK: Record<string, string> = {
   'tao': 'Thêm máy', 'chon-nhan-viec': 'Bật nhận việc', 'bo-nhan-viec': 'Thôi nhận việc', 'thu-hoi': 'Thu hồi', 'bat': 'Máy bật',
@@ -40,11 +40,12 @@ function CauHinh({ ch, soFootage, rieng }: { ch: CauHinhMay; soFootage: number; 
 export default async function MayWorkerPage() {
   await requireAdmin();
   const supabase = await supabaseServer();
-  const [{ data: may }, { data: nk }, { data: nguoi }, { data: cd }] = await Promise.all([
+  const [{ data: may }, { data: nk }, { data: nguoi }, { data: cd }, { data: qf }] = await Promise.all([
     supabase.from('video_workers').select('id,ten,trang_thai,dang_nhan_viec,phien_ban,lan_cuoi,footage,phong_cach,cau_hinh,created_at').order('created_at'),
     supabase.from('video_worker_nhat_ky').select('id,worker_id,su_kien,chi_tiet,created_at').order('id', { ascending: false }).limit(40),
     supabase.rpc('video_ds_nguoi'),
     supabase.from('settings').select('key,value').in('key', ['video_tran_ngay_usd', 'video_phien_ban_toi_thieu', 'video_giu_ban_xem_ngay']),
+    supabase.from('video_footage_quyen').select('footage,che_do,nguoi'),
   ]);
   const ten = new Map((may ?? []).map((m) => [m.id, m.ten]));
   const caiDat = new Map((cd ?? []).map((r) => [r.key, Number(r.value)]));
@@ -103,6 +104,43 @@ export default async function MayWorkerPage() {
 
       <h2>Thêm máy</h2>
       <ThemMay />
+
+      <h2>Quyền footage</h2>
+      <p className="meta">
+        Mặc định mọi tài khoản có quyền video đều thấy và làm được mọi footage. <strong>Ẩn</strong> = chỉ admin thấy;
+        <strong> Chỉ cho…</strong> = chỉ các tài khoản được tick. Footage bị chặn sẽ không hiện ở màn tạo video, và các video đã làm
+        từ footage đó cũng ẩn với người bị chặn. Admin luôn thấy hết.
+      </p>
+      <div className="card scroll">
+        <table>
+          <thead><tr><th>Thư mục footage</th><th>Nằm ở máy</th><th>Ai được xem / làm</th></tr></thead>
+          <tbody>
+            {(() => {
+              const oDau = new Map<string, string[]>();
+              for (const m of may ?? []) {
+                if (m.trang_thai === 'thu-hoi') continue;
+                for (const f of m.footage as string[]) oDau.set(f, [...(oDau.get(f) ?? []), m.ten]);
+              }
+              const quyen = new Map((qf ?? []).map((q) => [q.footage as string, q as { che_do: string; nguoi: string[] }]));
+              // tài khoản không phải admin, có quyền video
+              const dsNguoi = ((nguoi ?? []) as { user_id: string; email: string; ten: string | null; role: string; video_quyen: string[] }[])
+                .filter((n) => n.role !== 'admin' && n.video_quyen?.length).map((n) => ({ id: n.user_id, ten: n.ten || n.email }));
+              const ds = [...oDau.keys()].sort().reverse();
+              if (!ds.length) return <tr><td colSpan={3} className="muted">Chưa máy nào báo thư mục footage.</td></tr>;
+              return ds.map((f) => {
+                const q = quyen.get(f);
+                return (
+                  <tr key={f}>
+                    <td><code>{f}</code>{q && <div className="warn meta">{q.che_do === 'an' ? 'đang ẩn' : `chỉ ${q.nguoi.length} tài khoản`}</div>}</td>
+                    <td className="meta">{oDau.get(f)?.join(', ')}</td>
+                    <td><QuyenFootage footage={f} cheDo={q?.che_do ?? 'moi-nguoi'} nguoi={q?.nguoi ?? []} dsNguoi={dsNguoi} /></td>
+                  </tr>
+                );
+              });
+            })()}
+          </tbody>
+        </table>
+      </div>
 
       <h2>Người dùng module Video</h2>
       <div className="card scroll">

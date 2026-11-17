@@ -145,6 +145,16 @@ export async function chuyenMay(_: string | null, f: FormData): Promise<string |
   return goiRpc('video_chuyen_may', { p_job: job, p_may: s(f, 'may') }, `/video/${job}`);
 }
 
+/** Admin: quyền 1 thư mục footage — moi-nguoi / an (chỉ admin) / chi-cho (các tài khoản được tick). */
+export async function datQuyenFootage(_: string | null, f: FormData): Promise<string | null> {
+  const denied = await can('admin');
+  if (denied) return denied;
+  const nguoi = f.getAll('nguoi').map(String).filter(Boolean);
+  const loi = await goiRpc('video_dat_quyen_footage',
+    { p_footage: s(f, 'footage'), p_che_do: s(f, 'che_do'), p_nguoi: nguoi }, '/video/may');
+  return loi ?? 'Đã lưu.';
+}
+
 export async function luuCaiDat(_: string | null, f: FormData): Promise<string | null> {
   const denied = await can('admin');
   if (denied) return denied;

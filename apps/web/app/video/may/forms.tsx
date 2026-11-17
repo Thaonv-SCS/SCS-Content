@@ -1,7 +1,32 @@
 'use client';
 
-import { useActionState } from 'react';
-import { datQuyen, luuCaiDat, thaoTacMay, themMay } from '../actions';
+import { useActionState, useState } from 'react';
+import { datQuyen, datQuyenFootage, luuCaiDat, thaoTacMay, themMay } from '../actions';
+
+/** Quyền 1 thư mục footage: Mọi người / Ẩn (chỉ admin) / Chỉ cho các tài khoản được tick. */
+export function QuyenFootage({ footage, cheDo, nguoi, dsNguoi }: {
+  footage: string; cheDo: string; nguoi: string[]; dsNguoi: { id: string; ten: string }[];
+}) {
+  const [msg, action, pending] = useActionState(datQuyenFootage, null);
+  const [chon, setChon] = useState(cheDo);
+  return (
+    <form action={action} className="inline wrap">
+      <input type="hidden" name="footage" value={footage} />
+      <select name="che_do" value={chon} onChange={(e) => setChon(e.target.value)} style={{ width: 'auto', marginTop: 0 }}>
+        <option value="moi-nguoi">Mọi người</option>
+        <option value="an">Ẩn (chỉ admin)</option>
+        <option value="chi-cho">Chỉ cho…</option>
+      </select>
+      {chon === 'chi-cho' && dsNguoi.map((n) => (
+        <label key={n.id} className="inline">
+          <input type="checkbox" name="nguoi" value={n.id} defaultChecked={nguoi.includes(n.id)} style={{ width: 'auto', marginTop: 0 }} /> {n.ten}
+        </label>
+      ))}
+      <button type="submit" className="ghost small" disabled={pending}>Lưu</button>
+      {msg && <span className={msg === 'Đã lưu.' ? 'on' : 'warn'}>{msg}</span>}
+    </form>
+  );
+}
 
 export function ThemMay() {
   const [kq, action, pending] = useActionState(themMay, null);

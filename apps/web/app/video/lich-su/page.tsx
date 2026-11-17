@@ -83,7 +83,7 @@ export default async function LichSuVideoPage({ searchParams }: { searchParams: 
               <tr key={v.id}>
                 <td><Link href={`/video/${v.id}`}>{v.ten}</Link><div className="meta">{v.footage}</div></td>
                 <td>{tenMay.get(v.worker_id) ?? '—'}</td>
-                <td className={v.trang_thai === 'loi' ? 'warn' : v.trang_thai === 'xong' ? 'on' : ''}>{nhanTrangThai(v.trang_thai)}</td>
+                <td className={v.trang_thai === 'loi' ? 'warn' : v.trang_thai === 'xong' ? 'on' : v.trang_thai === 'huy' ? 'off' : ''}>{nhanTrangThai(v.trang_thai)}</td>
                 <td>{tenNguoi.get(v.tao_boi) ?? '—'}</td>
                 <td className="meta">{formatDateTime(v.created_at)}<br />{formatDateTime(v.updated_at)}</td>
                 <td>{v.phut_cong ?? '—'}{v.dung_duoc && <div className="meta">{DUNG_DUOC[v.dung_duoc]}</div>}</td>

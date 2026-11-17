@@ -6,14 +6,14 @@ import { supabaseServer } from '@/lib/supabase';
 import { mayDangLam, nhanTrangThai, usd } from '@/lib/video';
 import { Markdown } from '../markdown';
 import { TuLamMoi } from '../tu-lam-moi';
-import { AdminChayLai, DuyetDanY, DuyetThe, GopYChot, XongCanhTram } from './khung-duyet';
+import { AdminChayLai, DuyetDanY, DuyetThe, GopYChot, HuyViec, XongCanhTram } from './khung-duyet';
 import { TaiCanhTram } from './tai-canh-tram';
 
 type SuKien = { id: number; loai: string; noi_dung: Record<string, any>; nguoi: string | null; created_at: string };
 
 const NHAN_SU_KIEN: Record<string, string> = {
   'dan-y': '📝 Máy nộp dàn ý', 'the': '🎴 Máy nộp thẻ đồ họa', 'nhap': '🎬 Máy nộp bản nháp', 'duyet': '✓ Duyệt',
-  'gop-y': '💬 Góp ý', 'chot': '🏁 Chốt', 'loi': '⚠ Lỗi', 'thong-bao': 'ℹ Admin',
+  'gop-y': '💬 Góp ý', 'chot': '🏁 Chốt', 'huy': '✕ Hủy', 'loi': '⚠ Lỗi', 'thong-bao': 'ℹ Admin',
 };
 
 export default async function VideoChiTiet({ params }: { params: Promise<{ id: string }> }) {
@@ -62,7 +62,7 @@ export default async function VideoChiTiet({ params }: { params: Promise<{ id: s
         <span className={`badge ${v.trang_thai === 'loi' ? 'warn' : ''}`}>{nhanTrangThai(v.trang_thai)}</span>
       </div>
       <p className="meta">
-        {v.footage} · phong cách {v.phong_cach} · tạo bởi {v.tao_boi === me.id ? 'mày' : ten.get(v.tao_boi) ?? '—'} lúc {formatDateTime(v.created_at)}
+        {v.footage} · phong cách {v.phong_cach} · tạo bởi {ten.get(v.tao_boi) ?? '—'} lúc {formatDateTime(v.created_at)}
         {admin && <> · máy <strong>{may?.ten ?? '—'}</strong> · chi phí AI <strong>{usd(tongChiPhi)}</strong></>}
       </p>
       {v.thong_bao && <p className={v.trang_thai === 'loi' ? 'warn' : 'meta'}>{mayDangLam(v.trang_thai) ? '⏳ ' : ''}{v.thong_bao}</p>}
@@ -73,7 +73,7 @@ export default async function VideoChiTiet({ params }: { params: Promise<{ id: s
           <h2 className="md-h">Dàn ý</h2>
           <Markdown text={danY.dan_y_md ?? ''} />
           {!!danY.cau_hoi?.length && (
-            <div className="verify"><strong>Câu hỏi cho mày</strong><ol>{danY.cau_hoi.map((c: string, i: number) => <li key={i}>{c}</li>)}</ol></div>
+            <div className="verify"><strong>Câu hỏi cần trả lời</strong><ol>{danY.cau_hoi.map((c: string, i: number) => <li key={i}>{c}</li>)}</ol></div>
           )}
           <details><summary><strong>Cảnh trám cần chuẩn bị</strong></summary><Markdown text={danY.can_tram_md ?? ''} /></details>
           {lam ? <DuyetDanY job={id} coCauHoi={!!danY.cau_hoi?.length} /> : <p className="meta">Chờ người làm duyệt.</p>}
@@ -130,6 +130,12 @@ export default async function VideoChiTiet({ params }: { params: Promise<{ id: s
         </div>
       )}
 
+      {v.trang_thai === 'huy' && <p className="off">Video đã hủy — máy không làm tiếp.{admin ? ' Admin mở lại được bằng "đặt lại bước" bên dưới.' : ''}</p>}
+
+      {lam && v.trang_thai !== 'xong' && v.trang_thai !== 'huy' && (
+        <details className="card"><summary className="meta">Không làm video này nữa?</summary><HuyViec job={id} /></details>
+      )}
+
       {admin && v.trang_thai !== 'loi' && (
         <details className="card"><summary className="meta">Admin: đặt lại bước</summary><AdminChayLai job={id} /></details>
       )}
@@ -142,9 +148,9 @@ export default async function VideoChiTiet({ params }: { params: Promise<{ id: s
             {suKien.map((s) => (
               <tr key={s.id}>
                 <td className="meta" style={{ whiteSpace: 'nowrap' }}>{formatDateTime(s.created_at)}</td>
-                <td>{NHAN_SU_KIEN[s.loai] ?? s.loai}{s.nguoi ? ` · ${s.nguoi === me.id ? 'mày' : ten.get(s.nguoi) ?? ''}` : ''}</td>
+                <td>{NHAN_SU_KIEN[s.loai] ?? s.loai}{s.nguoi ? ` · ${ten.get(s.nguoi) ?? ''}` : ''}</td>
                 <td>
-                  {s.noi_dung?.ghi_chu || s.noi_dung?.gop_y || (s.loai === 'chot' ? `${s.noi_dung.phut} phút · ${s.noi_dung.dung_duoc}` : '')
+                  {s.noi_dung?.ghi_chu || s.noi_dung?.gop_y || s.noi_dung?.ly_do || (s.loai === 'chot' ? `${s.noi_dung.phut} phút · ${s.noi_dung.dung_duoc}` : '')
                     || (s.loai === 'nhap' ? `lần ${s.noi_dung.lan} · ${s.noi_dung.dai}s` : '') || (s.loai === 'thong-bao' ? `${s.noi_dung.admin_dat}: ${s.noi_dung.ly_do}` : '')}
                 </td>
               </tr>

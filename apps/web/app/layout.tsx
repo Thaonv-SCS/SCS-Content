@@ -1,13 +1,41 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
-import { currentUser } from '@/lib/auth';
+import { currentUser, type Me } from '@/lib/auth';
 import { signOut } from './auth-actions';
+import { NavLinks } from './nav-links';
 import './globals.css';
 
 export const metadata: Metadata = {
   title: 'Soccerstore Content',
   description: 'Bản tin ý tưởng content và viết nội dung sản phẩm',
 };
+
+/** Menu theo vai trò: admin = tất cả · staff = sản phẩm (+ Video nếu có quyền video) · video = chỉ Video. */
+function menu(me: Me | null): { href: string; label: string }[] {
+  if (!me) return [];
+  const video = me.videoQuyen.length ? [{ href: '/video', label: 'Video' }] : [];
+  if (me.role === 'admin') {
+    return [
+      { href: '/', label: 'Bản tin' },
+      { href: '/products', label: 'Post sản phẩm' },
+      { href: '/stock', label: 'Tình trạng hàng' },
+      { href: '/images', label: 'Up ảnh' },
+      ...video,
+      { href: '/captions', label: 'Kho caption' },
+      { href: '/raw', label: 'Bài thô' },
+      { href: '/sources', label: 'Nguồn' },
+      { href: '/settings', label: 'Cài đặt' },
+    ];
+  }
+  if (me.role === 'staff') {
+    return [
+      { href: '/products', label: 'Post sản phẩm' },
+      { href: '/stock', label: 'Tình trạng hàng' },
+      { href: '/images', label: 'Up ảnh' },
+      ...video,
+    ];
+  }
+  return video;
+}
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const me = await currentUser();
@@ -17,27 +45,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body>
         <header>
           <strong>⚽ Soccerstore Content</strong>
-          {me?.role === 'admin' && (
-            <>
-              <Link href="/">Bản tin</Link>
-              <Link href="/products">Post sản phẩm</Link>
-              <Link href="/stock">Tình trạng hàng</Link>
-              <Link href="/images">Up ảnh</Link>
-              <Link href="/video">Video</Link>
-              <Link href="/captions">Kho caption</Link>
-              <Link href="/raw">Bài thô</Link>
-              <Link href="/sources">Nguồn</Link>
-              <Link href="/settings">Cài đặt</Link>
-            </>
-          )}
-          {me?.role === 'staff' && (
-            <>
-              <Link href="/products">Post sản phẩm</Link>
-              <Link href="/stock">Tình trạng hàng</Link>
-              <Link href="/images">Up ảnh</Link>
-            </>
-          )}
-          {me?.role !== 'admin' && !!me?.videoQuyen.length && <Link href="/video">Video</Link>}
+          <NavLinks links={menu(me)} />
           {me && (
             <form action={signOut} className="spacer">
               <span className="meta">{me.email} </span>

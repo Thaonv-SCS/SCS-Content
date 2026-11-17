@@ -421,7 +421,7 @@ export async function checkImportSkus(
   skus: string[],
 ): Promise<{ ok: true; onWeb: { sku: string; name: string; status: string }[]; inApp: string[] } | { ok: false; error: string }> {
   const me = await currentUser();
-  if (!me?.role) return { ok: false, error: 'Tài khoản chưa được cấp quyền.' };
+  if (me?.role !== 'admin' && me?.role !== 'staff') return { ok: false, error: 'Tài khoản chưa được cấp quyền.' };
   const list = [...new Set(skus.map((s) => s.trim()).filter(Boolean))].slice(0, IMPORT_MAX_ROWS);
   try {
     const supabase = await supabaseServer();

@@ -69,6 +69,16 @@ export async function duyetThe(_: string | null, f: FormData): Promise<string | 
   return goiRpc('video_duyet_the', { p_job: job, p_ghi_chu: s(f, 'ghi_chu') }, `/video/${job}`);
 }
 
+/** Hủy video: không làm nữa (máy bỏ qua; admin mở lại được bằng "đặt lại bước"). */
+export async function huyViec(_: string | null, f: FormData): Promise<string | null> {
+  const denied = await can('lam');
+  if (denied) return denied;
+  const job = s(f, 'job');
+  const loi = await goiRpc('video_huy', { p_job: job, p_ly_do: s(f, 'ly_do') }, `/video/${job}`);
+  if (!loi) revalidatePath('/video');
+  return loi;
+}
+
 // ───────────── Người duyệt ─────────────
 export async function gopY(_: string | null, f: FormData): Promise<string | null> {
   const denied = await can('duyet');

@@ -41,7 +41,7 @@ export default async function VideoPage() {
 
       {ds.some((v) => canMinh(v.trang_thai)) && (
         <>
-          <h2>Đang chờ mày</h2>
+          <h2>Đang chờ</h2>
           <div className="feed">
             {ds.filter((v) => canMinh(v.trang_thai)).map((v) => (
               <Link key={v.id} href={`/video/${v.id}`} className="card video-cho">
@@ -66,10 +66,10 @@ export default async function VideoPage() {
                   <div className="meta">{v.footage}</div>
                 </td>
                 <td>
-                  <span className={v.trang_thai === 'loi' ? 'warn' : v.trang_thai === 'xong' ? 'on' : ''}>{nhanTrangThai(v.trang_thai)}</span>
+                  <span className={v.trang_thai === 'loi' ? 'warn' : v.trang_thai === 'xong' ? 'on' : v.trang_thai === 'huy' ? 'off' : ''}>{nhanTrangThai(v.trang_thai)}</span>
                   {v.thong_bao && mayDangLam(v.trang_thai) && <div className="meta">{v.thong_bao}</div>}
                 </td>
-                <td>{v.tao_boi === me.id ? 'mày' : ten.get(v.tao_boi) ?? '—'}</td>
+                <td>{ten.get(v.tao_boi) ?? '—'}</td>
                 <td>{formatDateTime(v.updated_at)}</td>
               </tr>
             ))}

@@ -2,10 +2,11 @@
 
 export type TrangThai =
   | 'moi' | 'dang-chuan-bi' | 'cho-duyet-dan-y' | 'cho-canh-tram' | 'canh-tram-xong' | 'dang-lam-the' | 'cho-duyet-the'
-  | 'dang-dung' | 'cho-xem-nhap' | 'gop-y' | 'dang-sua' | 'xong' | 'loi';
+  | 'dang-dung' | 'cho-xem-nhap' | 'gop-y' | 'dang-sua' | 'xong' | 'loi' | 'huy';
 
 /** Nhãn + ai đang phải làm ('may' = máy worker đang chạy, 'lam' = người làm, 'duyet' = người duyệt). */
-export const TRANG_THAI: Record<TrangThai, { nhan: string; ai: 'may' | 'lam' | 'duyet' | 'xong' | 'loi' }> = {
+export const TRANG_THAI: Record<TrangThai, { nhan: string; ai: 'may' | 'lam' | 'duyet' | 'xong' | 'loi' | 'huy' }> = {
+  'huy': { nhan: 'Đã hủy', ai: 'huy' },
   'moi': { nhan: 'Chờ máy nhận', ai: 'may' },
   'dang-chuan-bi': { nhan: 'Máy đang chuẩn bị + viết dàn ý', ai: 'may' },
   'cho-duyet-dan-y': { nhan: 'Chờ duyệt dàn ý', ai: 'lam' },

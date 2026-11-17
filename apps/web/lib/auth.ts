@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation';
 import { supabaseServer } from './supabase';
 
-export type Role = 'admin' | 'staff';
+/** admin: mọi thứ · staff: post sản phẩm / tồn kho / ảnh (+ video nếu có video_quyen) · video: CHỈ module Video */
+export type Role = 'admin' | 'staff' | 'video';
 
 /** Quyền module Video: 'lam' = người làm (tạo việc, duyệt dàn ý, tải cảnh trám, duyệt thẻ), 'duyet' = người duyệt bản nháp. */
 export type VideoQuyen = 'lam' | 'duyet';
@@ -30,18 +31,18 @@ export async function requireVideo(quyen?: VideoQuyen) {
   return me;
 }
 
-/** Trang chỉ dành cho admin: nhân viên được chuyển sang trang Sản phẩm. */
+/** Trang chỉ dành cho admin: nhân viên được chuyển sang trang của mình (Sản phẩm, hoặc Video với tài khoản video). */
 export async function requireAdmin() {
   const me = await currentUser();
   if (!me) redirect('/login');
-  if (me.role !== 'admin') redirect('/products');
+  if (me.role !== 'admin') redirect(me.role === 'video' ? '/video' : '/products');
   return me;
 }
 
-/** Trang dùng chung admin + nhân viên. */
+/** Trang sản phẩm / tồn kho / ảnh: admin + nhân viên post (staff). Tài khoản video bị chuyển về trang Video. */
 export async function requireTeam() {
   const me = await currentUser();
   if (!me) redirect('/login');
-  if (!me.role) redirect('/no-access');
+  if (me.role !== 'admin' && me.role !== 'staff') redirect(me.videoQuyen.length ? '/video' : '/no-access');
   return me;
 }

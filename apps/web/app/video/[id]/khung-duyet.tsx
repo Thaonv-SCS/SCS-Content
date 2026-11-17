@@ -1,7 +1,7 @@
 'use client';
 
 import { useActionState } from 'react';
-import { chot, datTrangThai, duyetDanY, duyetThe, gopY, xongCanhTram } from '../actions';
+import { chot, datTrangThai, duyetDanY, duyetThe, gopY, huyViec, xongCanhTram } from '../actions';
 
 function KetQua({ loi, pending }: { loi: string | null; pending: boolean }) {
   if (pending) return <span className="meta">Đang gửi…</span>;
@@ -14,7 +14,7 @@ export function DuyetDanY({ job, coCauHoi }: { job: string; coCauHoi: boolean })
     <form action={action} className="settings wide">
       <input type="hidden" name="job" value={job} />
       <label>
-        <strong>Ý kiến của mày{coCauHoi ? ' (trả lời các câu hỏi ở trên)' : ''}</strong>
+        <strong>Ý kiến duyệt{coCauHoi ? ' (trả lời các câu hỏi ở trên)' : ''}</strong>
         <span className="meta">vd: giữ đoạn 3b, bỏ 4b; cam kết bảo hành đúng; hook đổi thành "…"</span>
         <textarea name="ghi_chu" rows={4} />
       </label>
@@ -105,12 +105,27 @@ export function GopYChot({ job }: { job: string }) {
   );
 }
 
+/** Hủy video: không làm nữa. Hỏi lại trước khi hủy. */
+export function HuyViec({ job }: { job: string }) {
+  const [loi, action, pending] = useActionState(huyViec, null);
+  return (
+    <form action={action} className="inline wrap"
+      onSubmit={(e) => { if (!confirm('Hủy video này? Máy sẽ không làm tiếp nữa (admin mở lại được).')) e.preventDefault(); }}>
+      <input type="hidden" name="job" value={job} />
+      <input name="ly_do" placeholder="lý do hủy (không bắt buộc)" style={{ width: 240, marginTop: 0 }} />
+      <button type="submit" className="ghost danger" disabled={pending}>✕ Hủy video</button>
+      <KetQua loi={loi} pending={pending} />
+    </form>
+  );
+}
+
 const CHAY_LAI = [
   { tt: 'dang-chuan-bi', ten: 'Làm lại từ dàn ý' },
   { tt: 'canh-tram-xong', ten: 'Làm lại thẻ đồ họa' },
   { tt: 'dang-dung', ten: 'Dựng lại (kế hoạch + dựng)' },
   { tt: 'gop-y', ten: 'Chạy lại bước sửa theo góp ý' },
   { tt: 'cho-xem-nhap', ten: 'Đưa về chờ xem nháp' },
+  { tt: 'cho-duyet-dan-y', ten: 'Mở lại (đưa về chờ duyệt dàn ý)' },
 ];
 
 export function AdminChayLai({ job }: { job: string }) {

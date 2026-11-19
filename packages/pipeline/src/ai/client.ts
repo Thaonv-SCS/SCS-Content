@@ -28,6 +28,7 @@ export class Budget {
     const { data, error } = await this.db
       .from('llm_calls')
       .select('cost_usd')
+      .is('job_id', null) // tiền video có trần riêng (video_tran_ngay_usd), không tính vào trần bản tin
       .gte('created_at', new Date(`${today}T00:00:00+07:00`).toISOString());
     if (error) throw error;
     this.spent = (data ?? []).reduce((s, r: { cost_usd: number | string }) => s + Number(r.cost_usd), 0);

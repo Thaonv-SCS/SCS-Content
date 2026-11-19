@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import {
   addGoldExampleByUrl,
+  buildPastedOutput,
   createDraftProduct,
   findBySkus,
   IMPORT_MAX_ROWS,
@@ -118,13 +119,31 @@ export async function createProduct(_prev: string | null, form: FormData): Promi
   const basics = readBasics(form);
   if (!basics.name) return 'Thiếu tên sản phẩm.';
 
+  const pasted = form.get('mode') === 'paste' ? String(form.get('pasted') ?? '').trim() : null;
+  if (pasted === '') return 'Chưa dán nội dung mô tả.';
+
   const supabase = await supabaseServer();
+  const spec = readSpec(type, form);
   const { data, error } = await supabase
     .from('products')
-    .insert({ type, ...basics, spec: readSpec(type, form) })
+    .insert({ type, ...basics, spec })
     .select('id')
     .single();
   if (error || !data) return `Lỗi lưu sản phẩm: ${error?.message}`;
+
+  // Nội dung soạn sẵn: không gọi AI, mô tả = bài dán + link nội bộ app tự gắn
+  if (pasted) {
+    try {
+      const output = await buildPastedOutput(supabase, { id: data.id, type, ...basics, spec, output: null, category_ids: [] }, pasted);
+      await supabase
+        .from('products')
+        .update({ output, category_ids: output.suggested_category_ids, job_status: 'done', updated_at: new Date().toISOString() })
+        .eq('id', data.id);
+    } catch (err) {
+      return `Đã lưu sản phẩm nhưng lỗi xử lý bài dán: ${(err as Error).message}`;
+    }
+    redirect(`/products/${data.id}`);
+  }
 
   const err = await startProductJob(data.id, 'generate');
   if (err) return err;
@@ -134,7 +153,7 @@ export async function createProduct(_prev: string | null, form: FormData): Promi
 /** Lưu phiếu; nếu bấm "Lưu & viết lại" thì viết lại từ phiếu mới. */
 export async function updateSpec(id: string, _prev: string | null, form: FormData): Promise<string | null> {
   const supabase = await supabaseServer();
-  const { data: p } = await supabase.from('products').select('type').eq('id', id).single();
+  const { data: p } = await supabase.from('products').select('type,output').eq('id', id).single();
   if (!p) return 'Không tìm thấy sản phẩm.';
   const basics = readBasics(form);
   if (!basics.name) return 'Thiếu tên sản phẩm.';
@@ -143,12 +162,16 @@ export async function updateSpec(id: string, _prev: string | null, form: FormDat
     .update({ ...basics, spec: readSpec(p.type, form), updated_at: new Date().toISOString() })
     .eq('id', id);
   if (error) return `Lỗi: ${error.message}`;
-  const err = form.get('regenerate') ? await startProductJob(id, 'generate') : null;
+  const manual = (p.output as ProductOutput | null)?.manual;
+  const err = form.get('regenerate') && !manual ? await startProductJob(id, 'generate') : null;
   revalidatePath(`/products/${id}`);
   return err;
 }
 
 export async function regenerate(id: string, _prev: string | null, form: FormData): Promise<string | null> {
+  const supabase = await supabaseServer();
+  const { data: p } = await supabase.from('products').select('output').eq('id', id).single();
+  if ((p?.output as ProductOutput | null)?.manual) return 'Bài này là nội dung tự dán — sửa bằng nút Sửa tay.';
   const instruction = String(form.get('instruction') ?? '').trim() || undefined;
   const err = await startProductJob(id, 'generate', instruction);
   revalidatePath(`/products/${id}`);
@@ -207,7 +230,8 @@ export async function saveOutputEdit(id: string, _prev: string | null, form: For
       .filter(Boolean),
   };
   await supabase.from('products').update({ output, updated_at: new Date().toISOString() }).eq('id', id);
-  await supabase.from('product_revisions').insert({ product_id: id, kind: 'edit', output });
+  // Bài tự dán không phải bài AI viết → không dùng để học văn phong
+  if (!output.manual) await supabase.from('product_revisions').insert({ product_id: id, kind: 'edit', output });
   revalidatePath(`/products/${id}`);
   return null;
 }

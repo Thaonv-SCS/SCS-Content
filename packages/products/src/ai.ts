@@ -11,7 +11,7 @@ import { fetchBrands, matchBrand, type Brand, type WooCategory } from './woo.ts'
 export const PRODUCT_PROMPT_VERSION = 'product-v3';
 
 /** Danh mục dòng: nằm trong cây "Bộ Sưu Tập", hoặc tên chứa tên hãng (vd "Puma Future", "Kamito"). */
-function isLineCategory(c: WooCategory, categories: Map<number, WooCategory>, brands: Brand[]): boolean {
+export function isLineCategory(c: WooCategory, categories: Map<number, WooCategory>, brands: Brand[]): boolean {
   for (let cur: WooCategory | undefined = c; cur; cur = cur.parent ? categories.get(cur.parent) : undefined) {
     if (cur.slug === 'bo-suu-tap') return cur !== c;
   }
@@ -19,7 +19,7 @@ function isLineCategory(c: WooCategory, categories: Map<number, WooCategory>, br
 }
 
 /** Danh mục loại sân theo loại đinh (giày): TF/AG → cỏ nhân tạo, FG/SG → cỏ tự nhiên, MG → cả hai. */
-function surfaceCategories(product: ProductRow, categories: Map<number, WooCategory>): WooCategory[] {
+export function surfaceCategories(product: ProductRow, categories: Map<number, WooCategory>): WooCategory[] {
   if (product.type !== 'boots') return [];
   const plate = (product.spec.soleplate?.trim() || product.name.match(/\b(FG|SG|AG|MG|TF|IC)\b/i)?.[1] || '').toUpperCase();
   const slugs = { TF: ['giay-co-nhan-tao'], AG: ['giay-co-nhan-tao'], FG: ['giay-co-tu-nhien'], SG: ['giay-co-tu-nhien'], MG: ['giay-co-nhan-tao', 'giay-co-tu-nhien'] }[plate] ?? [];

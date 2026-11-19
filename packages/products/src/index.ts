@@ -11,6 +11,7 @@ export { syncFromWebsite, addGoldExampleByUrl, GOLD_EXAMPLE_SLUGS } from './sync
 export { countEdits, STYLE_EVERY } from './style.ts';
 export { parseVariants, variantName, type Variant } from './batch.ts';
 export { slugify } from './html.ts';
+export { buildPastedOutput, pastedToHtml } from './paste.ts';
 export { PRODUCT_PROMPT_VERSION } from './ai.ts';
 export {
   fetchStockPage,

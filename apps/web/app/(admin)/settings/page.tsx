@@ -2,26 +2,21 @@ import { isRunActive, parseSettings, type RunStatus } from '@app/core';
 import { supabaseServer } from '@/lib/supabase';
 import { saveSettings } from './actions';
 import { RunPanel } from './run-panel';
+import { CostReport, KY, type Ky } from './cost-report';
 
-const TZ = 'Asia/Ho_Chi_Minh';
-
-export default async function SettingsPage() {
+export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ ky?: string }> }) {
   const supabase = await supabaseServer();
-  const today = new Date().toLocaleDateString('sv-SE', { timeZone: TZ });
-  const monthStart = `${today.slice(0, 7)}-01`;
+  const { ky: kyRaw } = await searchParams;
+  const ky: Ky = KY.some((k) => k.ma === kyRaw) ? (kyRaw as Ky) : 'thang-nay';
 
-  const [{ data: rows, error }, { data: calls }, { data: digests }] = await Promise.all([
+  const [{ data: rows, error }, { data: digests }] = await Promise.all([
     supabase.from('settings').select('key,value'),
-    supabase.from('llm_calls').select('cost_usd,created_at').gte('created_at', new Date(`${monthStart}T00:00:00+07:00`).toISOString()),
     supabase.from('digests').select('date,viewed_at').eq('status', 'ready').order('date', { ascending: false }).limit(7),
   ]);
   if (error) return <p className="warn">Chưa có bảng cài đặt — cần chạy migration 0003 trên Supabase.</p>;
 
   const s = parseSettings(rows);
   const lastRun = (rows?.find((r) => r.key === 'last_run')?.value ?? null) as RunStatus | null;
-  const todayStart = new Date(`${today}T00:00:00+07:00`).getTime();
-  const spentMonth = (calls ?? []).reduce((sum, c) => sum + Number(c.cost_usd), 0);
-  const spentToday = (calls ?? []).filter((c) => new Date(c.created_at).getTime() >= todayStart).reduce((sum, c) => sum + Number(c.cost_usd), 0);
 
   const recent = digests ?? [];
   const unviewedStreak = recent.findIndex((d) => d.viewed_at) === -1 ? recent.length : recent.findIndex((d) => d.viewed_at);
@@ -64,11 +59,14 @@ export default async function SettingsPage() {
         </label>
 
         <label>
-          <strong>Trần chi phí AI mỗi ngày</strong>
+          <strong>Trần chi phí AI mỗi ngày — bản tin + Post sản phẩm</strong>
           <span className="inline">
             $ <input type="number" name="daily_budget_usd" min={0} max={20} step={0.5} defaultValue={s.daily_budget_usd} />
           </span>
-          <span className="meta">Chạm trần thì dừng gọi AI trong ngày. Một bản tin hiện tốn khoảng $0.5.</span>
+          <span className="meta">
+            Chạm trần thì dừng gọi AI trong ngày. Một bản tin khoảng $0.5, một bài sản phẩm khoảng $0.1. Video có trần riêng (Video → Máy worker →
+            Cài đặt), không tính vào đây.
+          </span>
         </label>
 
         <div>
@@ -77,9 +75,7 @@ export default async function SettingsPage() {
       </form>
 
       <h2>Chi phí AI</h2>
-      <div className="card">
-        Hôm nay: <strong>${spentToday.toFixed(2)}</strong> · Tháng này: <strong>${spentMonth.toFixed(2)}</strong>
-      </div>
+      <CostReport supabase={supabase} ky={ky} />
     </>
   );
 }

@@ -317,7 +317,7 @@ export async function createDraftProduct(input: DraftInput): Promise<DraftResult
       { key: '_yoast_wpseo_title', value: input.seo_title },
       { key: '_yoast_wpseo_metadesc', value: input.meta_description },
       { key: '_yoast_wpseo_focuskw', value: input.focus_keyphrase },
-    ],
+    ].filter((m) => m.value?.trim()), // ô trống (bài tự dán chưa điền) → để Yoast dùng mặc định
   });
   return { id: created.id, edit_url: `${WOO_URL}/wp-admin/post.php?post=${created.id}&action=edit`, brand: brand?.name ?? null };
 }

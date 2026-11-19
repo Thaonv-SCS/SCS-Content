@@ -186,3 +186,21 @@ tr.row-dirty td { background: color-mix(in srgb, var(--warn) 8%, transparent); }
 .price-inputs label { display: grid; flex: 1; font-size: 12px; }
 .price-inputs input { margin-top: 2px; padding: 5px 8px; text-align: right; }
 .price-inputs input.changed { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.cost-tiles { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); }
+.cost-big { font-size: 26px; font-weight: 700; margin: 2px 0; font-variant-numeric: tabular-nums; }
+a.chip { text-decoration: none; }
+.cost-chart { width: 100%; height: auto; margin-top: 10px; }
+.cost-grid { stroke: var(--border); stroke-width: 1; }
+.cost-base { stroke: var(--muted); stroke-width: 1; }
+.cost-axis { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.cost-mark { fill: var(--accent); }
+.cost-hit { fill: transparent; }
+.cost-col:hover .cost-hit { fill: var(--border); opacity: .5; }
+.cost-bar { display: inline-block; width: calc(100% - 52px); height: 8px; border-radius: 4px; background: var(--bg); vertical-align: middle; overflow: hidden; }
+.cost-bar > span { display: block; height: 100%; border-radius: 4px; background: var(--accent); }
+tr.cost-cat td { background: var(--bg); }
+tr.cost-step td:first-child { padding-left: 24px; }
+.cost-2col { display: grid; gap: 0 20px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); }
+td, th { font-variant-numeric: tabular-nums; }
+.save-bar { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 50; display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-radius: 10px; background: var(--surface); border: 1px solid var(--accent); box-shadow: 0 4px 16px rgb(0 0 0 / 0.18); max-width: calc(100vw - 32px); }
+.save-bar button { margin: 0; }

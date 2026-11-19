@@ -10,3 +10,4 @@ export * from './catalog/index.ts';
 
 /** Danh sách nguồn ban đầu. Khi đã có Supabase, bảng `sources` là nguồn sự thật; file này chỉ để seed. */
 export const seedSources = seed as SourceConfig[];
+export * from './costs.ts';

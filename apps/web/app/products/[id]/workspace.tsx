@@ -87,6 +87,7 @@ export function Workspace({
   const router = useRouter();
   const busy = p.job_status === 'queued' || p.job_status === 'running';
   const o = p.output;
+  const manual = !!o?.manual;
 
   // Đang viết / đang tìm → tự làm mới để hiện kết quả khi xong
   useEffect(() => {
@@ -146,12 +147,13 @@ export function Workspace({
             <BasicFields initial={p} />
             <SpecInputs fields={fields} values={p.spec} notes={p.notes} />
             <div className="inline">
-              <button type="submit" name="regenerate" value="1" disabled={savingSpec || busy}>Lưu & viết lại</button>
-              <button type="submit" className="ghost" disabled={savingSpec}>Chỉ lưu phiếu</button>
+              {!manual && <button type="submit" name="regenerate" value="1" disabled={savingSpec || busy}>Lưu & viết lại</button>}
+              <button type="submit" className={manual ? '' : 'ghost'} disabled={savingSpec}>{manual ? 'Lưu phiếu' : 'Chỉ lưu phiếu'}</button>
               {specError && <span className="warn">{specError}</span>}
             </div>
           </form>
 
+          {!manual && (<>
           <h2>Tìm thêm thông tin</h2>
           <div className="card settings wide">
             <div className="inline">
@@ -191,6 +193,7 @@ export function Workspace({
               </form>
             )}
           </div>
+          </>)}
         </section>
 
         {/* ───────── Cột phải: kết quả ───────── */}
@@ -224,6 +227,15 @@ export function Workspace({
             </form>
           ) : (
             <div className="card settings wide">
+              {manual && (
+                <div className="verify">
+                  <div className="label">📋 Nội dung tự dán — không dùng AI</div>
+                  <ul>
+                    {(o.link_report ?? []).map((r) => <li key={r}>{r}</li>)}
+                    <li>Tiêu đề SEO, meta, từ khóa, mô tả ngắn đang trống — bấm Sửa tay nếu muốn điền (không bắt buộc).</li>
+                  </ul>
+                </div>
+              )}
               <Field label="Tiêu đề SEO" value={o.seo_title} hint={`${titleLen} ký tự${titleLen > 65 ? ' · hơi dài' : ''}`} />
               <Field label="Meta description" value={o.meta_description} hint={`${metaLen} ký tự${metaLen > 165 ? ' · hơi dài' : metaLen < 120 ? ' · hơi ngắn' : ''}`} />
               <Field label="Từ khóa chính" value={o.focus_keyphrase} />
@@ -259,11 +271,13 @@ export function Workspace({
               <div className="inline">
                 <button className="ghost" onClick={() => setEditing(true)}>Sửa tay</button>
               </div>
-              <form action={doRegen} className="inline">
-                <input name="instruction" placeholder='Yêu cầu viết lại, vd "ngắn hơn", "nhấn mạnh độ bám sân"' />
-                <button type="submit" className="ghost" disabled={regenerating || busy}>Viết lại</button>
-                {regenError && <span className="warn">{regenError}</span>}
-              </form>
+              {!manual && (
+                <form action={doRegen} className="inline">
+                  <input name="instruction" placeholder='Yêu cầu viết lại, vd "ngắn hơn", "nhấn mạnh độ bám sân"' />
+                  <button type="submit" className="ghost" disabled={regenerating || busy}>Viết lại</button>
+                  {regenError && <span className="warn">{regenError}</span>}
+                </form>
+              )}
             </div>
           )}
 
@@ -271,7 +285,7 @@ export function Workspace({
             <>
               <h2>Danh mục & bản nháp WooCommerce</h2>
               <div className="card settings wide">
-                <div className="meta">Danh mục AI gợi ý được đánh dấu ★ — chỉnh lại nếu cần.</div>
+                <div className="meta">Danh mục {manual ? 'app' : 'AI'} gợi ý được đánh dấu ★ — chỉnh lại nếu cần.</div>
                 <div className="cat-list">
                   {categories.map((c) => (
                     <label key={c.id} className="switch-row">

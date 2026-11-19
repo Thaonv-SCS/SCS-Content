@@ -34,11 +34,12 @@ Mỗi sáng tổng hợp tin giày & bóng đá, gợi ý bài đăng. Không ba
 - "Tìm thêm thông tin" trên web có nguồn; sửa tay; viết lại theo yêu cầu.
 - Tạo **bản nháp** WooCommerce: tên, mã, giá + giá KM, size, Loại Đinh (kèm loại sân), Hãng (XStore), danh mục, tags, Yoast.
 - Nhập **nhiều màu** một lần (màu sau không viết lặp màu trước); **nhập từ Excel** nhiều sản phẩm khác nhau (file mẫu, kiểm tra trùng mã trên web).
+- **Dán nội dung soạn sẵn** (không dùng AI): mô tả giữ nguyên bài dán, app tự gắn link nội bộ (dòng → hãng → loại sân) bằng cách dò chữ trong bài, báo link nào không gắn được.
 - Học văn phong: tự rút luật từ bản sửa tay (mỗi +10 bản), mẫu chuẩn chọn trong app; bài đã đẩy lên web được ưu tiên làm mẫu.
 - Phân quyền admin / nhân viên; chi phí AI theo người. Chi phí khoảng $0,10/bài viết, $0,15–0,2/lần tìm thêm.
 
 **Cập nhật sản phẩm** (sửa thẳng trên web, có lịch sử + hoàn tác)
-- Tình trạng còn / hết hàng + chế độ hiển thị (4 mức).
+- Tình trạng còn / hết hàng + chế độ hiển thị (4 mức). Chuyển sang hết hàng thì tự bỏ giá sale, về giá gốc (Hoàn tác trả lại).
 - Giá niêm yết / giá sale sửa trên từng dòng; dán bảng từ Excel hoặc áp chung (giảm %, làm tròn 10.000đ).
 - Size sửa trên từng dòng kiểu WooCommerce (không tự tạo size mới); gộp size 40.5 bị trùng (~448 sản phẩm).
 
@@ -78,7 +79,8 @@ Làm ảnh đăng bài theo mẫu (template) của shop. Chi tiết: bàn và ch
 - **Đẩy code:** thử kỹ trên máy, chỉ commit + đẩy khi chủ shop chốt. Gộp nhiều thay đổi vào 1 lần đẩy (Netlify gói miễn phí 300 credit/tháng).
 - **Migration Supabase:** số tăng dần, lấy số kế tiếp sau số lớn nhất hiện có (hiện tới `0018`). Chạy migration trên Supabase **trước** khi đẩy code dùng nó.
 - **Module Video:** sửa trên bản sao `D:\SCS Video Studio dev` (laptop chủ shop là máy worker thật, chạy code từ `D:\SCS Video Studio`). Việc chạm cả app lẫn worker: đẩy theo thứ tự database → worker → web.
-- **Mốc phiên bản (tag git):** đánh dấu khi xong một giai đoạn / bản lớn.
+- **Mốc phiên bản (tag git):** `giai-doan-N` cho app, `video-vN` cho Video; đánh dấu khi xong một giai đoạn / bản lớn.
+- **Chi phí AI / dịch vụ trả phí:** mọi lần gọi ghi vào bảng `llm_calls` với `purpose = "<loại>:<bước>"` (vd `image:tao-anh`, `voice:doc-loi`) → tự hiện ở Cài đặt → Chi phí AI. Thêm tên tiếng Việt cho loại / bước ở `packages/core/src/costs.ts`. Chi phí của 1 video ghi kèm `job_id` (tính vào trần video, không tính vào trần bản tin + sản phẩm).
 
 ## Lịch sử phiên bản
 | Ngày | Repo | Mốc |

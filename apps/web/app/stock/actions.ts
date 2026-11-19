@@ -84,6 +84,9 @@ function toUpdate(c: Change): StockUpdate | null {
   if (c.kind === 'stock') {
     if (c.new_stock && c.new_stock !== c.old_stock) u.stock_status = c.new_stock;
     if (c.new_visibility && c.new_visibility !== c.old_visibility) u.catalog_visibility = c.new_visibility;
+    // Hết hàng thì bỏ giá sale; Hoàn tác thì trả lại giá sale cũ
+    const sale = c.new_stock === 'outofstock' && c.old_sale ? null : c.new_sale;
+    if (sale !== undefined && sale !== c.old_sale) u.sale_price = sale ? String(sale) : '';
   } else if (c.kind === 'price') {
     if (c.new_regular != null && c.new_regular !== c.old_regular) u.regular_price = String(c.new_regular);
     if (c.new_sale !== undefined && c.new_sale !== c.old_sale) u.sale_price = c.new_sale ? String(c.new_sale) : '';

@@ -76,6 +76,10 @@ export interface ProductOutput {
   to_verify: { claim: string; reason: string }[];
   model?: string;
   generated_at?: string;
+  /** true = nội dung người dùng tự dán, không dùng AI (không viết lại, không dùng để học văn phong). */
+  manual?: boolean;
+  /** Bài tự dán: app đã gắn link nội bộ nào, link nào không gắn được. */
+  link_report?: string[];
 }
 
 export interface ResearchFact {

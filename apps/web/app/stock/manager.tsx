@@ -113,7 +113,12 @@ async function sendInChunks(
 /** Áp kết quả đã gửi thành công vào danh sách đang hiện. */
 function applyLocally(p: StockItem, c: Change): StockItem {
   if (c.kind === 'stock')
-    return { ...p, ...(c.new_stock ? { stock_status: c.new_stock } : {}), ...(c.new_visibility ? { catalog_visibility: c.new_visibility } : {}) };
+    return {
+      ...p,
+      ...(c.new_stock ? { stock_status: c.new_stock } : {}),
+      ...(c.new_visibility ? { catalog_visibility: c.new_visibility } : {}),
+      ...(c.new_sale !== undefined ? { sale_price: c.new_sale ? String(c.new_sale) : '' } : {}),
+    };
   if (c.kind === 'price')
     return {
       ...p,
@@ -294,16 +299,46 @@ export function StockManager({ history }: { history: RunSummary[] }) {
     }
   };
 
+  /** Lưu mọi dòng đã sửa giá trong MỘT lần cập nhật (gửi theo lô 25, có thanh tiến độ, 1 dòng lịch sử, hoàn tác cả lần). */
   const saveAllPrices = () => {
-    const warned = dirtyPriceItems.filter((p) => {
+    const bad = new Map<number, string>();
+    const changes: Change[] = [];
+    for (const p of dirtyPriceItems) {
       const d = priceOf(p);
-      return priceWarnings(d.regular, d.sale, originalPrice(p).regular).length;
-    }).length;
-    if (!confirm(`Lưu giá cho ${dirtyPriceItems.length} sản phẩm lên web?${warned ? `\n⚠ ${warned} sản phẩm có cảnh báo giá — xem lại các dòng có ⚠.` : ''}`)) return;
-    start(async () => {
-      for (const p of dirtyPriceItems) await savePrice(p);
-      router.refresh();
-    });
+      const o = originalPrice(p);
+      if (!d.regular) bad.set(p.id, 'Thiếu giá niêm yết');
+      else if (d.sale && d.sale >= d.regular) bad.set(p.id, 'Giá sale phải nhỏ hơn giá niêm yết');
+      else
+        changes.push({
+          id: p.id,
+          sku: p.sku,
+          name: p.name,
+          kind: 'price',
+          old_regular: o.regular,
+          old_sale: o.sale,
+          ...(d.regular !== o.regular ? { new_regular: d.regular } : {}),
+          ...(d.sale !== o.sale ? { new_sale: d.sale } : {}),
+        });
+    }
+    if (bad.size) setPriceStatus((prev) => {
+        const next = new Map(prev);
+        bad.forEach((msg, id) => next.set(id, { state: 'error', msg }));
+        return next;
+      });
+    if (!changes.length) return setReport(`✗ ${bad.size} dòng có lỗi giá (xem cột Lưu) — chưa lưu gì.`);
+    const warned = changes.filter((c) => priceWarnings(c.new_regular ?? c.old_regular ?? null, c.new_sale !== undefined ? c.new_sale : (c.old_sale ?? null), c.old_regular ?? null).length).length;
+    run(
+      changes,
+      `Lưu giá cho ${changes.length} sản phẩm lên web?${bad.size ? `\n(${bad.size} dòng có lỗi giá sẽ bỏ qua)` : ''}${warned ? `\n⚠ ${warned} sản phẩm có cảnh báo giá — xem lại các dòng có ⚠.` : ''}`,
+      (ok) => {
+        setPriceDraft((prev) => new Map([...prev].filter(([id]) => !ok.has(id))));
+        setPriceStatus((prev) => {
+          const next = new Map(prev);
+          ok.forEach((id) => next.set(id, { state: 'saved' }));
+          return next;
+        });
+      },
+    );
   };
 
   /** Cách B: áp chung cho các mã đang chọn → điền vào ô giá từng dòng (chưa lưu). */
@@ -428,11 +463,20 @@ export function StockManager({ history }: { history: RunSummary[] }) {
     }
   };
 
+  /** Lưu mọi dòng đã sửa size trong MỘT lần cập nhật (gửi theo lô 25, có thanh tiến độ, hoàn tác cả lần). */
   const saveAllSizes = () =>
-    start(async () => {
-      for (const p of dirtyItems) await saveSize(p);
-      router.refresh();
-    });
+    run(
+      dirtyItems.map((p) => ({ id: p.id, sku: p.sku, name: p.name, kind: 'size', old_sizes: p.sizes, new_sizes: sortSizes(sizeDraft.get(p.id)!) })),
+      `Lưu size cho ${dirtyItems.length} sản phẩm lên web?`,
+      (ok) => {
+        setSizeDraft((prev) => new Map([...prev].filter(([id]) => !ok.has(id))));
+        setSizeStatus((prev) => {
+          const next = new Map(prev);
+          ok.forEach((id) => next.set(id, { state: 'saved' }));
+          return next;
+        });
+      },
+    );
 
   const loadMerge405 = () =>
     start(async () => {
@@ -452,9 +496,10 @@ export function StockManager({ history }: { history: RunSummary[] }) {
   const run = (changes: Change[], confirmText: string, onDone: (ok: Set<number>) => void) => {
     if (!changes.length) return setReport('Không có gì để đổi.');
     if (!confirm(`${confirmText}\nThay đổi có hiệu lực ngay trên web; hoàn tác được trong mục Lịch sử.`)) return;
+    // Đặt ngoài start(): cập nhật trong transition bị hoãn tới lúc xong → thanh tiến độ phải hiện ngay khi bấm
+    setProgress({ done: 0, total: changes.length, label: 'Đang cập nhật' });
     start(async () => {
       const runId = crypto.randomUUID();
-      setProgress({ done: 0, total: changes.length, label: 'Đang cập nhật' });
       const { okIds, errors } = await sendInChunks(runId, changes, (done) => setProgress({ done, total: changes.length, label: 'Đang cập nhật' }));
       const byId = new Map(changes.map((c) => [c.id, c]));
       setItems((prev) => prev.map((p) => (okIds.has(p.id) && byId.has(p.id) ? applyLocally(p, byId.get(p.id)!) : p)));
@@ -476,10 +521,24 @@ export function StockManager({ history }: { history: RunSummary[] }) {
         old_visibility: p.catalog_visibility,
         ...(newStock ? { new_stock: newStock } : {}),
         ...(newVis ? { new_visibility: newVis } : {}),
+        // Hết hàng → bỏ giá sale, về giá gốc (lưu giá sale cũ để Hoàn tác trả lại)
+        ...(newStock === 'outofstock' && parseMoney(p.sale_price) ? { old_sale: parseMoney(p.sale_price), new_sale: null } : {}),
       }))
-      .filter((c) => (c.new_stock && c.new_stock !== c.old_stock) || (c.new_visibility && c.new_visibility !== c.old_visibility));
+      .filter(
+        (c) =>
+          (c.new_stock && c.new_stock !== c.old_stock) ||
+          (c.new_visibility && c.new_visibility !== c.old_visibility) ||
+          c.new_sale === null,
+      );
     if (!changes.length) return setReport('Các sản phẩm đã chọn đều đã đúng trạng thái này — không có gì để đổi.');
-    const what = [newStock && `→ ${STOCK_LABEL[newStock]}`, newVis && `hiển thị: ${VISIBILITY_LABEL[newVis]}`].filter(Boolean).join(', ');
+    const dropSale = changes.filter((c) => c.new_sale === null).length;
+    const what = [
+      newStock && `→ ${STOCK_LABEL[newStock]}`,
+      newVis && `hiển thị: ${VISIBILITY_LABEL[newVis]}`,
+      dropSale && `bỏ giá sale ${dropSale} sản phẩm, về giá gốc`,
+    ]
+      .filter(Boolean)
+      .join(', ');
     run(changes, `Đổi ${changes.length} sản phẩm (${what})?`, () => {});
   };
 
@@ -698,6 +757,27 @@ export function StockManager({ history }: { history: RunSummary[] }) {
             )}
             {report && <pre className="run-log">{report}</pre>}
           </div>
+
+          {/* Thanh lưu nổi ở đáy màn hình: luôn thấy dù đã kéo xuống cuối bảng */}
+          {((tab === 'price' && dirtyPriceItems.length > 0) || (tab === 'size' && dirtyItems.length > 0) || progress) && (
+            <div className="save-bar">
+              {progress ? (
+                <span>
+                  ⏳ {progress.label} {progress.done}/{progress.total}…
+                  <progress value={progress.done} max={progress.total} style={{ width: 160, marginLeft: 8 }} />
+                </span>
+              ) : (
+                <>
+                  <span>
+                    ● {tab === 'price' ? dirtyPriceItems.length : dirtyItems.length} mã đã sửa {tab === 'price' ? 'giá' : 'size'}, chưa lưu
+                  </span>
+                  <button onClick={tab === 'price' ? saveAllPrices : saveAllSizes} disabled={busy}>
+                    Lưu tất cả
+                  </button>
+                </>
+              )}
+            </div>
+          )}
 
           <div className="card">
             <div className="inline wrap" style={{ marginBottom: 10 }}>

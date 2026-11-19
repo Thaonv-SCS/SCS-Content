@@ -15,6 +15,8 @@ export { PRODUCT_PROMPT_VERSION } from './ai.ts';
 export {
   fetchStockPage,
   findBySkus,
+  fetchDuplicate405Page,
+  fetchSizeTerms,
   updateStock,
   STOCK_LABEL,
   VISIBILITY_LABEL,

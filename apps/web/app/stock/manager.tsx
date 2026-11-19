@@ -2,27 +2,89 @@
 
 import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { STOCK_LABEL, VISIBILITY_LABEL, type StockItem, type StockStatus, type Visibility } from '@app/products/src/stock-types.ts';
-import { applyStockChunk, getRunChanges, loadStockPage, lookupSkus, markUndone, type Change } from './actions';
+import {
+  STOCK_LABEL,
+  VISIBILITY_LABEL,
+  parseMoney,
+  parseSaleCell,
+  priceWarnings,
+  roundTo10k,
+  sortSizes,
+  type StockItem,
+  type StockStatus,
+  type Visibility,
+} from '@app/products/src/stock-types.ts';
+import {
+  applyStockChunk,
+  getRunChanges,
+  loadDuplicate405Page,
+  loadSizeTerms,
+  loadStockPage,
+  lookupSkus,
+  markUndone,
+  type Change,
+} from './actions';
+import { SizeEditor } from './size-editor';
+import { PriceEditor, type PriceDraft } from './price-editor';
+
+/** Trạng thái lưu của một dòng (giá / size). */
+function RowSaveCell({
+  dirty,
+  status,
+  onSave,
+}: {
+  dirty: boolean;
+  status?: { state: 'saving' | 'saved' | 'error'; msg?: string };
+  onSave: () => void;
+}) {
+  if (status?.state === 'saving') return <span className="meta">⏳ Đang lưu…</span>;
+  return (
+    <>
+      {status?.state === 'error' && (
+        <div className="warn" style={{ fontSize: 12 }} title={status.msg}>
+          ✗ {status.msg}
+        </div>
+      )}
+      {dirty ? (
+        <>
+          <div className="warn" style={{ fontSize: 12 }}>● Đã thay đổi</div>
+          <button className="small" onClick={onSave}>Lưu</button>
+        </>
+      ) : status?.state === 'saved' ? (
+        <span className="on">✓ Đã lưu</span>
+      ) : status?.state !== 'error' ? (
+        <span className="meta">—</span>
+      ) : null}
+    </>
+  );
+}
 
 export type RunSummary = {
   run_id: string;
+  kind: string;
   at: string;
   who: string;
   count: number;
   toOut: number;
   toIn: number;
   visibility: Record<string, number>;
+  saleOn: number;
+  saleOff: number;
+  regularChanged: number;
   undoOf: string | null;
   undone: boolean;
 };
+
+type Tab = 'stock' | 'price' | 'size';
+type PriceOp = 'percent' | 'sale' | 'regular' | 'remove';
 
 const PAGE = 100;
 const CHUNK = 25;
 const VIS = Object.keys(VISIBILITY_LABEL) as Visibility[];
 const fmt = (iso: string) => new Date(iso).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', dateStyle: 'short', timeStyle: 'short' });
+const num = (s: string) => parseMoney(s);
 
-/** Gửi lần lượt từng phần lên web, báo tiến độ. Trả về số thành công + lỗi. */
+/** Gửi lần lượt từng phần lên web, báo tiến độ. */
 async function sendInChunks(
   runId: string,
   changes: Change[],
@@ -36,22 +98,35 @@ async function sendInChunks(
     const res = await applyStockChunk(runId, part, undoOf);
     if (!res.ok) {
       errors.push(res.error);
-      break; // lỗi cả phần (mất kết nối, bị chặn…) → dừng, phần đã gửi vẫn được lưu lịch sử
+      break; // lỗi cả phần (mất kết nối, bị chặn, dữ liệu sai…) → dừng; phần đã gửi vẫn có lịch sử
     }
     for (const r of res.data) {
       if (r.error) errors.push(`${part.find((c) => c.id === r.id)?.sku || r.id}: ${r.error}`);
       else okIds.add(r.id);
     }
-    // Sản phẩm không cần đổi (đã đúng trạng thái) cũng tính là xong
-    part.forEach((c) => !res.data.some((r) => r.id === c.id) && okIds.add(c.id));
+    part.forEach((c) => !res.data.some((r) => r.id === c.id) && okIds.add(c.id)); // không cần đổi = coi như xong
     onProgress(Math.min(i + CHUNK, changes.length));
   }
   return { okIds, errors };
 }
 
+/** Áp kết quả đã gửi thành công vào danh sách đang hiện. */
+function applyLocally(p: StockItem, c: Change): StockItem {
+  if (c.kind === 'stock')
+    return { ...p, ...(c.new_stock ? { stock_status: c.new_stock } : {}), ...(c.new_visibility ? { catalog_visibility: c.new_visibility } : {}) };
+  if (c.kind === 'price')
+    return {
+      ...p,
+      ...(c.new_regular != null ? { regular_price: String(c.new_regular) } : {}),
+      ...(c.new_sale !== undefined ? { sale_price: c.new_sale ? String(c.new_sale) : '' } : {}),
+    };
+  return { ...p, sizes: c.new_sizes ?? p.sizes };
+}
+
 export function StockManager({ history }: { history: RunSummary[] }) {
   const router = useRouter();
-  const [mode, setMode] = useState<'list' | 'sku'>('list');
+  const [tab, setTab] = useState<Tab>('stock');
+  const [mode, setMode] = useState<'list' | 'sku'>('sku');
   const [listFilter, setListFilter] = useState<StockStatus | 'all'>('outofstock');
   const [skuText, setSkuText] = useState('');
   const [items, setItems] = useState<StockItem[]>([]);
@@ -65,13 +140,29 @@ export function StockManager({ history }: { history: RunSummary[] }) {
   const [page, setPage] = useState(0);
   const [selected, setSelected] = useState<Set<number>>(new Set());
 
+  // Tình trạng & hiển thị
   const [newStock, setNewStock] = useState<StockStatus | ''>('');
   const [newVis, setNewVis] = useState<Visibility | ''>('');
+  // Giá
+  const [priceOp, setPriceOp] = useState<PriceOp>('percent');
+  const [priceValue, setPriceValue] = useState('');
+  const [priceTable, setPriceTable] = useState('');
+  // Size
+  const [sizeTerms, setSizeTerms] = useState<string[] | null>(null);
+  /** Giá đang sửa của từng mã (chưa lưu) và trạng thái lưu */
+  const [priceDraft, setPriceDraft] = useState<Map<number, PriceDraft>>(new Map());
+  const [priceStatus, setPriceStatus] = useState<Map<number, { state: 'saving' | 'saved' | 'error'; msg?: string }>>(new Map());
+  /** Size đang sửa của từng mã (chưa lưu) và trạng thái lưu */
+  const [sizeDraft, setSizeDraft] = useState<Map<number, string[]>>(new Map());
+  const [sizeStatus, setSizeStatus] = useState<Map<number, { state: 'saving' | 'saved' | 'error'; msg?: string }>>(new Map());
+  // Xem trước (giá / size / gộp size): id → thay đổi
+  const [pending, setPending] = useState<Map<number, Change>>(new Map());
+  const [pendingNote, setPendingNote] = useState<string | null>(null);
+
   const [progress, setProgress] = useState<{ done: number; total: number; label: string } | null>(null);
   const [report, setReport] = useState<string | null>(null);
-  const [pending, start] = useTransition();
-
-  const busy = !!loading || !!progress || pending;
+  const [pending_, start] = useTransition();
+  const busy = !!loading || !!progress || pending_;
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -85,6 +176,7 @@ export function StockManager({ history }: { history: RunSummary[] }) {
   const shown = filtered.slice(page * PAGE, (page + 1) * PAGE);
   const pages = Math.ceil(filtered.length / PAGE);
   const allFilteredSelected = filtered.length > 0 && filtered.every((p) => selected.has(p.id));
+  const chosen = items.filter((p) => selected.has(p.id));
 
   const reset = (list: StockItem[], miss: string[] = [], selectAll = false) => {
     setItems(list);
@@ -92,31 +184,40 @@ export function StockManager({ history }: { history: RunSummary[] }) {
     setSelected(new Set(selectAll ? list.map((p) => p.id) : []));
     setPage(0);
     setReport(null);
+    setPending(new Map());
+    setPendingNote(null);
+    setSizeDraft(new Map());
+    setSizeStatus(new Map());
+    setPriceDraft(new Map());
+    setPriceStatus(new Map());
+  };
+
+  /** Tải nhiều trang (3 trang cùng lúc) với thanh tiến độ. */
+  const loadPages = async (loader: (page: number) => ReturnType<typeof loadStockPage>) => {
+    setError(null);
+    const first = await loader(1);
+    if (!first.ok) return setError(first.error), null;
+    const all = [...first.data.items];
+    setLoading({ done: all.length, total: first.data.total });
+    for (let p = 2; p <= first.data.totalPages; p += 3) {
+      const batch = await Promise.all([p, p + 1, p + 2].filter((x) => x <= first.data.totalPages).map((x) => loader(x)));
+      for (const r of batch) {
+        if (!r.ok) {
+          setLoading(null);
+          return setError(r.error), null;
+        }
+        all.push(...r.data.items);
+      }
+      setLoading({ done: all.length, total: first.data.total });
+    }
+    setLoading(null);
+    return all;
   };
 
   const loadList = () =>
     start(async () => {
-      setError(null);
-      const first = await loadStockPage(listFilter, 1);
-      if (!first.ok) return setError(first.error);
-      const all = [...first.data.items];
-      setLoading({ done: all.length, total: first.data.total });
-      // Tải các trang còn lại, 3 trang cùng lúc
-      for (let p = 2; p <= first.data.totalPages; p += 3) {
-        const batch = await Promise.all(
-          [p, p + 1, p + 2].filter((x) => x <= first.data.totalPages).map((x) => loadStockPage(listFilter, x)),
-        );
-        for (const r of batch) {
-          if (!r.ok) {
-            setLoading(null);
-            return setError(r.error);
-          }
-          all.push(...r.data.items);
-        }
-        setLoading({ done: all.length, total: first.data.total });
-      }
-      setLoading(null);
-      reset(all);
+      const all = await loadPages((p) => loadStockPage(listFilter, p));
+      if (all) reset(all);
     });
 
   const findSkus = () =>
@@ -124,16 +225,253 @@ export function StockManager({ history }: { history: RunSummary[] }) {
       setError(null);
       const r = await lookupSkus(skuText);
       if (!r.ok) return setError(r.error);
-      reset(r.data.items, r.data.missing, true); // tìm theo mã thì chọn sẵn tất cả
+      reset(r.data.items, r.data.missing, true);
     });
 
-  const apply = () => {
-    const chosen = items.filter((p) => selected.has(p.id));
+  const openTab = (t: Tab) => {
+    setTab(t);
+    setPending(new Map());
+    setPendingNote(null);
+    setReport(null);
+    if (t === 'size' && !sizeTerms)
+      start(async () => {
+        const r = await loadSizeTerms();
+        if (r.ok) setSizeTerms(r.data);
+        else setError(r.error);
+      });
+  };
+
+  // ───────────── Giá: sửa trên từng dòng ─────────────
+
+  const originalPrice = (p: StockItem): PriceDraft => ({ regular: num(p.regular_price), sale: num(p.sale_price) });
+  const priceOf = (p: StockItem): PriceDraft => priceDraft.get(p.id) ?? originalPrice(p);
+  const isPriceDirty = (p: StockItem) => {
+    const d = priceDraft.get(p.id);
+    const o = originalPrice(p);
+    return !!d && (d.regular !== o.regular || d.sale !== o.sale);
+  };
+  const dirtyPriceItems = items.filter(isPriceDirty);
+
+  const editPrice = (id: number, v: PriceDraft) => {
+    setPriceDraft((prev) => new Map(prev).set(id, v));
+    setPriceStatus((prev) => {
+      const next = new Map(prev);
+      next.delete(id);
+      return next;
+    });
+  };
+
+  /** Lưu giá của một mã lên web (mỗi lần lưu là một dòng lịch sử, hoàn tác được). */
+  const savePrice = async (p: StockItem) => {
+    const d = priceDraft.get(p.id);
+    if (!d) return;
+    const o = originalPrice(p);
+    if (!d.regular) return setPriceStatus((prev) => new Map(prev).set(p.id, { state: 'error', msg: 'Thiếu giá niêm yết' }));
+    if (d.sale && d.sale >= d.regular)
+      return setPriceStatus((prev) => new Map(prev).set(p.id, { state: 'error', msg: 'Giá sale phải nhỏ hơn giá niêm yết' }));
+    setPriceStatus((prev) => new Map(prev).set(p.id, { state: 'saving' }));
+    const change: Change = {
+      id: p.id,
+      sku: p.sku,
+      name: p.name,
+      kind: 'price',
+      old_regular: o.regular,
+      old_sale: o.sale,
+      ...(d.regular !== o.regular ? { new_regular: d.regular } : {}),
+      ...(d.sale !== o.sale ? { new_sale: d.sale } : {}),
+    };
+    const { okIds, errors } = await sendInChunks(crypto.randomUUID(), [change], () => {});
+    if (okIds.has(p.id) && !errors.length) {
+      setItems((prev) => prev.map((x) => (x.id === p.id ? { ...x, regular_price: String(d.regular), sale_price: d.sale ? String(d.sale) : '' } : x)));
+      setPriceDraft((prev) => {
+        const next = new Map(prev);
+        next.delete(p.id);
+        return next;
+      });
+      setPriceStatus((prev) => new Map(prev).set(p.id, { state: 'saved' }));
+    } else {
+      setPriceStatus((prev) => new Map(prev).set(p.id, { state: 'error', msg: errors.join('; ') || 'Lỗi không rõ' }));
+    }
+  };
+
+  const saveAllPrices = () => {
+    const warned = dirtyPriceItems.filter((p) => {
+      const d = priceOf(p);
+      return priceWarnings(d.regular, d.sale, originalPrice(p).regular).length;
+    }).length;
+    if (!confirm(`Lưu giá cho ${dirtyPriceItems.length} sản phẩm lên web?${warned ? `\n⚠ ${warned} sản phẩm có cảnh báo giá — xem lại các dòng có ⚠.` : ''}`)) return;
+    start(async () => {
+      for (const p of dirtyPriceItems) await savePrice(p);
+      router.refresh();
+    });
+  };
+
+  /** Cách B: áp chung cho các mã đang chọn → điền vào ô giá từng dòng (chưa lưu). */
+  const fillPriceForSelected = () => {
+    const value = parseMoney(priceValue);
+    if (priceOp !== 'remove' && !value) return setPendingNote('✗ Nhập số (% hoặc giá) trước.');
+    if (priceOp === 'percent' && (value! <= 0 || value! >= 90)) return setPendingNote('✗ % giảm phải từ 1 đến 89.');
+    const next = new Map(priceDraft);
+    let filled = 0;
+    let skipped = 0;
+    for (const p of chosen) {
+      const cur = priceOf(p);
+      let v: PriceDraft;
+      if (priceOp === 'percent') {
+        if (!cur.regular) {
+          skipped++;
+          continue;
+        }
+        v = { ...cur, sale: roundTo10k(cur.regular * (1 - value! / 100)) };
+      } else if (priceOp === 'sale') v = { ...cur, sale: value };
+      else if (priceOp === 'regular') v = { ...cur, regular: value };
+      else v = { ...cur, sale: null };
+      next.set(p.id, v);
+      filled++;
+    }
+    setPriceDraft(next);
+    setPendingNote(
+      `Đã điền giá mới vào ${filled} dòng${skipped ? ` · ${skipped} bỏ qua (chưa có giá niêm yết)` : ''}. Xem lại từng dòng rồi bấm Lưu (hoặc "Lưu tất cả").`,
+    );
+  };
+
+  /** Cách A: dán bảng "mã | giá niêm yết | giá sale" → tìm mã chưa có, rồi điền vào ô giá từng dòng (chưa lưu). */
+  const fillPriceTable = () =>
+    start(async () => {
+      const rows = priceTable
+        .split(/\r?\n/)
+        .map((l) => (l.includes('\t') ? l.split('\t') : l.split('|')).map((c) => c.trim()))
+        .filter((c) => c[0] && !/^m[aã]/i.test(c[0]));
+      if (!rows.length) return setPendingNote('✗ Chưa có dòng nào (mỗi dòng: mã | giá niêm yết | giá sale).');
+      let list = items;
+      const have = new Set(items.map((p) => p.sku.toLowerCase()));
+      const need = rows.map((r) => r[0]!).filter((s) => !have.has(s.toLowerCase()));
+      let miss: string[] = [];
+      if (need.length) {
+        const r = await lookupSkus(need.join('\n'));
+        if (!r.ok) return setError(r.error);
+        list = [...items, ...r.data.items];
+        miss = r.data.missing;
+        setItems(list);
+      }
+      const bySku = new Map(list.map((p) => [p.sku.toLowerCase(), p]));
+      const next = new Map(priceDraft);
+      const touched = new Set<number>();
+      const errs: string[] = [];
+      for (const [sku, regularCell = '', saleCell = ''] of rows) {
+        const p = bySku.get(sku!.toLowerCase());
+        if (!p) continue;
+        const cur = next.get(p.id) ?? originalPrice(p);
+        const v: PriceDraft = { ...cur };
+        if (regularCell) {
+          const r = parseMoney(regularCell);
+          if (!r) {
+            errs.push(`${sku}: giá niêm yết "${regularCell}" không hợp lệ`);
+            continue;
+          }
+          v.regular = r;
+        }
+        const s = parseSaleCell(saleCell);
+        if ('error' in s) {
+          errs.push(`${sku}: ${s.error}`);
+          continue;
+        }
+        if ('remove' in s) v.sale = null;
+        if ('price' in s) v.sale = s.price;
+        next.set(p.id, v);
+        touched.add(p.id);
+      }
+      setPriceDraft(next);
+      setSelected(touched);
+      setMissing(miss);
+      setPage(0);
+      setPendingNote(
+        `Đã điền giá vào ${touched.size} dòng — xem lại rồi bấm Lưu từng dòng hoặc "Lưu tất cả".${miss.length ? ` Không tìm thấy ${miss.length} mã.` : ''}${errs.length ? `\n✗ ${errs.join('\n✗ ')}` : ''}`,
+      );
+    });
+
+  // ───────────── Xem trước: size ─────────────
+
+  const sameList = (a: string[], b: string[]) => a.length === b.length && a.every((s, i) => s === b[i]);
+  const isDirty = (p: StockItem) => {
+    const d = sizeDraft.get(p.id);
+    return !!d && !sameList(sortSizes(d), sortSizes(p.sizes));
+  };
+  const dirtyItems = items.filter(isDirty);
+
+  const editSize = (id: number, sizes: string[]) => {
+    setSizeDraft((prev) => new Map(prev).set(id, sizes));
+    setSizeStatus((prev) => {
+      const next = new Map(prev);
+      next.delete(id);
+      return next;
+    });
+  };
+
+  /** Lưu size của một mã lên web (mỗi lần lưu là một dòng lịch sử, hoàn tác được). */
+  const saveSize = async (p: StockItem) => {
+    const draft = sizeDraft.get(p.id);
+    if (!draft) return;
+    setSizeStatus((prev) => new Map(prev).set(p.id, { state: 'saving' }));
+    const change: Change = { id: p.id, sku: p.sku, name: p.name, kind: 'size', old_sizes: p.sizes, new_sizes: sortSizes(draft) };
+    const { okIds, errors } = await sendInChunks(crypto.randomUUID(), [change], () => {});
+    if (okIds.has(p.id) && !errors.length) {
+      setItems((prev) => prev.map((x) => (x.id === p.id ? { ...x, sizes: change.new_sizes! } : x)));
+      setSizeDraft((prev) => {
+        const next = new Map(prev);
+        next.delete(p.id);
+        return next;
+      });
+      setSizeStatus((prev) => new Map(prev).set(p.id, { state: 'saved' }));
+    } else {
+      setSizeStatus((prev) => new Map(prev).set(p.id, { state: 'error', msg: errors.join('; ') || 'Lỗi không rõ' }));
+    }
+  };
+
+  const saveAllSizes = () =>
+    start(async () => {
+      for (const p of dirtyItems) await saveSize(p);
+      router.refresh();
+    });
+
+  const loadMerge405 = () =>
+    start(async () => {
+      const all = await loadPages((p) => loadDuplicate405Page(p));
+      if (!all) return;
+      reset(all, [], true);
+      setPending(new Map(all.map((p) => [p.id, { id: p.id, sku: p.sku, name: p.name, kind: 'merge_size', old_sizes: p.sizes, new_sizes: p.sizes }])));
+      setPendingNote(
+        all.length
+          ? `${all.length} sản phẩm đang dùng bản "40.5" trùng. Bấm Cập nhật để chuyển hết về một bản — size hiển thị không đổi, chỉ bộ lọc 40.5 trên web gom đủ sản phẩm.`
+          : '✓ Không còn sản phẩm nào dùng bản 40.5 trùng.',
+      );
+    });
+
+  // ───────────── Gửi lên web ─────────────
+
+  const run = (changes: Change[], confirmText: string, onDone: (ok: Set<number>) => void) => {
+    if (!changes.length) return setReport('Không có gì để đổi.');
+    if (!confirm(`${confirmText}\nThay đổi có hiệu lực ngay trên web; hoàn tác được trong mục Lịch sử.`)) return;
+    start(async () => {
+      const runId = crypto.randomUUID();
+      setProgress({ done: 0, total: changes.length, label: 'Đang cập nhật' });
+      const { okIds, errors } = await sendInChunks(runId, changes, (done) => setProgress({ done, total: changes.length, label: 'Đang cập nhật' }));
+      const byId = new Map(changes.map((c) => [c.id, c]));
+      setItems((prev) => prev.map((p) => (okIds.has(p.id) && byId.has(p.id) ? applyLocally(p, byId.get(p.id)!) : p)));
+      setProgress(null);
+      setReport(`✓ Đã cập nhật ${okIds.size}/${changes.length} sản phẩm.${errors.length ? `\n✗ Lỗi:\n${errors.join('\n')}` : ''}`);
+      onDone(okIds);
+      router.refresh();
+    });
+  };
+
+  const applyStock = () => {
     const changes: Change[] = chosen
       .map((p) => ({
         id: p.id,
         sku: p.sku,
         name: p.name,
+        kind: 'stock' as const,
         old_stock: p.stock_status,
         old_visibility: p.catalog_visibility,
         ...(newStock ? { new_stock: newStock } : {}),
@@ -142,44 +480,38 @@ export function StockManager({ history }: { history: RunSummary[] }) {
       .filter((c) => (c.new_stock && c.new_stock !== c.old_stock) || (c.new_visibility && c.new_visibility !== c.old_visibility));
     if (!changes.length) return setReport('Các sản phẩm đã chọn đều đã đúng trạng thái này — không có gì để đổi.');
     const what = [newStock && `→ ${STOCK_LABEL[newStock]}`, newVis && `hiển thị: ${VISIBILITY_LABEL[newVis]}`].filter(Boolean).join(', ');
-    if (!confirm(`Đổi ${changes.length} sản phẩm trên web (${what})?\nThay đổi có hiệu lực ngay; hoàn tác được trong mục Lịch sử.`)) return;
+    run(changes, `Đổi ${changes.length} sản phẩm (${what})?`, () => {});
+  };
 
-    start(async () => {
-      const runId = crypto.randomUUID();
-      setProgress({ done: 0, total: changes.length, label: 'Đang cập nhật' });
-      const { okIds, errors } = await sendInChunks(runId, changes, (done) => setProgress({ done, total: changes.length, label: 'Đang cập nhật' }));
-      setItems((prev) =>
-        prev.map((p) =>
-          okIds.has(p.id)
-            ? { ...p, ...(newStock ? { stock_status: newStock } : {}), ...(newVis ? { catalog_visibility: newVis } : {}) }
-            : p,
-        ),
-      );
-      setProgress(null);
-      setReport(`✓ Đã cập nhật ${okIds.size}/${changes.length} sản phẩm.${errors.length ? `\n✗ Lỗi:\n${errors.join('\n')}` : ''}`);
-      router.refresh();
+  const applyPending = () => {
+    const changes = [...pending.values()].filter((c) => selected.has(c.id));
+    const warned = changes.filter(
+      (c) => c.kind === 'price' && priceWarnings(c.new_regular ?? c.old_regular ?? null, c.new_sale !== undefined ? c.new_sale : (c.old_sale ?? null), c.old_regular ?? null).length,
+    ).length;
+    const label = changes[0]?.kind === 'merge_size' ? 'Gộp size 40.5 cho' : changes[0]?.kind === 'size' ? 'Đổi size' : 'Đổi giá';
+    run(changes, `${label} ${changes.length} sản phẩm?${warned ? `\n⚠ ${warned} sản phẩm có cảnh báo giá — xem lại cột "Giá mới".` : ''}`, (ok) => {
+      setPending((prev) => new Map([...prev].filter(([id]) => !ok.has(id))));
+      setPendingNote(null);
     });
   };
 
-  const undo = (run: RunSummary) => {
-    if (!confirm(`Hoàn tác lần cập nhật ${run.count} sản phẩm lúc ${fmt(run.at)}? Các sản phẩm sẽ trở về trạng thái trước đó.`)) return;
+  const undo = (r: RunSummary) => {
+    if (!confirm(`Hoàn tác lần cập nhật ${r.count} sản phẩm lúc ${fmt(r.at)}? Các sản phẩm sẽ trở về như trước đó.`)) return;
     start(async () => {
-      const r = await getRunChanges(run.run_id);
-      if (!r.ok) return setReport(`✗ ${r.error}`);
-      setProgress({ done: 0, total: r.data.length, label: 'Đang hoàn tác' });
+      const res = await getRunChanges(r.run_id);
+      if (!res.ok) return setReport(`✗ ${res.error}`);
+      setProgress({ done: 0, total: res.data.length, label: 'Đang hoàn tác' });
       const { okIds, errors } = await sendInChunks(
         crypto.randomUUID(),
-        r.data,
-        (done) => setProgress({ done, total: r.data.length, label: 'Đang hoàn tác' }),
-        run.run_id,
+        res.data,
+        (done) => setProgress({ done, total: res.data.length, label: 'Đang hoàn tác' }),
+        r.run_id,
       );
-      if (!errors.length) await markUndone(run.run_id);
-      const back = new Map(r.data.map((c) => [c.id, c]));
-      setItems((prev) =>
-        prev.map((p) => (okIds.has(p.id) ? { ...p, stock_status: back.get(p.id)!.new_stock!, catalog_visibility: back.get(p.id)!.new_visibility! } : p)),
-      );
+      if (!errors.length) await markUndone(r.run_id);
+      const back = new Map(res.data.map((c) => [c.id, c]));
+      setItems((prev) => prev.map((p) => (okIds.has(p.id) && back.has(p.id) ? applyLocally(p, back.get(p.id)!) : p)));
       setProgress(null);
-      setReport(`✓ Đã hoàn tác ${okIds.size}/${r.data.length} sản phẩm.${errors.length ? `\n✗ Lỗi (lần này chưa đánh dấu đã hoàn tác, bấm lại để thử tiếp):\n${errors.join('\n')}` : ''}`);
+      setReport(`✓ Đã hoàn tác ${okIds.size}/${res.data.length} sản phẩm.${errors.length ? `\n✗ Lỗi (chưa đánh dấu đã hoàn tác, bấm lại để thử tiếp):\n${errors.join('\n')}` : ''}`);
       router.refresh();
     });
   };
@@ -192,16 +524,34 @@ export function StockManager({ history }: { history: RunSummary[] }) {
       return next;
     });
 
+  const pendingCount = [...pending.keys()].filter((id) => selected.has(id)).length;
+
+  // ───────────── Giao diện ─────────────
+
   return (
     <>
-      {/* ───────── Chọn nguồn sản phẩm ───────── */}
+      <div className="inline wrap" style={{ marginBottom: 12 }}>
+        {(
+          [
+            ['stock', 'Tình trạng & hiển thị'],
+            ['price', 'Giá'],
+            ['size', 'Size'],
+          ] as const
+        ).map(([t, label]) => (
+          <button key={t} className={tab === t ? '' : 'ghost'} onClick={() => openTab(t)} disabled={busy}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* ───────── Chọn sản phẩm ───────── */}
       <div className="card settings wide">
         <div className="inline">
-          <button className={mode === 'list' ? '' : 'ghost'} onClick={() => setMode('list')} disabled={busy}>Xem danh sách</button>
           <button className={mode === 'sku' ? '' : 'ghost'} onClick={() => setMode('sku')} disabled={busy}>Theo danh sách mã</button>
+          <button className={mode === 'list' ? '' : 'ghost'} onClick={() => setMode('list')} disabled={busy}>Xem danh sách</button>
         </div>
         {mode === 'list' ? (
-          <div className="inline">
+          <div className="inline wrap">
             <select value={listFilter} onChange={(e) => setListFilter(e.target.value as StockStatus | 'all')} style={{ width: 'auto', marginTop: 0 }}>
               <option value="outofstock">Sản phẩm đang hết hàng</option>
               <option value="instock">Sản phẩm đang còn hàng</option>
@@ -213,7 +563,7 @@ export function StockManager({ history }: { history: RunSummary[] }) {
         ) : (
           <>
             <textarea
-              rows={5}
+              rows={4}
               value={skuText}
               onChange={(e) => setSkuText(e.target.value)}
               placeholder={'Mỗi dòng một mã (dán thẳng cột mã từ Excel được), vd:\nFQ8687-446\nDV4342-401'}
@@ -224,11 +574,7 @@ export function StockManager({ history }: { history: RunSummary[] }) {
             </div>
           </>
         )}
-        {loading && (
-          <div className="meta">
-            ⏳ Đang tải {loading.done}/{loading.total} sản phẩm…
-          </div>
-        )}
+        {loading && <div className="meta">⏳ Đang tải {loading.done}/{loading.total} sản phẩm…</div>}
         {error && <div className="warn">✗ {error}</div>}
         {missing.length > 0 && (
           <div className="verify">
@@ -238,30 +584,112 @@ export function StockManager({ history }: { history: RunSummary[] }) {
         )}
       </div>
 
-      {/* ───────── Danh sách + thao tác ───────── */}
+      {/* ───────── Thao tác theo mục ───────── */}
+      {tab === 'price' && (
+        <div className="card settings wide">
+          <div className="label">Cách A — dán bảng giá từ Excel</div>
+          <textarea
+            rows={4}
+            value={priceTable}
+            onChange={(e) => setPriceTable(e.target.value)}
+            placeholder={'mã | giá niêm yết | giá sale — mỗi dòng một mã, vd:\nFQ8687-446 | 2950000 | 2500000\nDV4342-401 |  | 1990000      (giá niêm yết trống = giữ nguyên)\nIV2368-800 | 4200000 | 0      (giá sale 0 hoặc - = bỏ giảm giá)'}
+          />
+          <div className="inline">
+            <button className="ghost" onClick={fillPriceTable} disabled={busy || !priceTable.trim()}>Điền vào bảng</button>
+            <span className="meta">Ô trống = giữ nguyên giá đang có. Mã chưa có trong danh sách sẽ tự tìm trên web.</span>
+          </div>
+          <div className="label">Cách B — áp chung cho các mã đang chọn ({selected.size})</div>
+          <div className="inline wrap">
+            <select value={priceOp} onChange={(e) => setPriceOp(e.target.value as PriceOp)} style={{ width: 'auto', marginTop: 0 }}>
+              <option value="percent">Giảm % so với giá niêm yết</option>
+              <option value="sale">Đặt giá sale bằng</option>
+              <option value="regular">Đặt giá niêm yết bằng</option>
+              <option value="remove">Bỏ giảm giá (bán giá niêm yết)</option>
+            </select>
+            {priceOp !== 'remove' && (
+              <input
+                value={priceValue}
+                onChange={(e) => setPriceValue(e.target.value)}
+                placeholder={priceOp === 'percent' ? 'vd 15' : 'vd 990000'}
+                style={{ width: 140, marginTop: 0 }}
+              />
+            )}
+            <button className="ghost" onClick={fillPriceForSelected} disabled={busy || !selected.size}>Điền vào các dòng đã chọn</button>
+            {priceOp === 'percent' && <span className="meta">Giá sale làm tròn đến 10.000đ.</span>}
+          </div>
+          <div className="meta">
+            Hoặc sửa thẳng ô giá trên từng dòng bên dưới (giá sale để trống = không giảm giá) → bấm <strong>Lưu</strong> cuối dòng. Cách A / B chỉ điền sẵn
+            giá vào các dòng, chưa lưu lên web.
+          </div>
+        </div>
+      )}
+
+      {tab === 'size' && (
+        <div className="card settings wide">
+          <div className="meta">
+            Dán mã ở trên → <strong>Kiểm tra</strong> → bấm vào <strong>ô size</strong> của từng sản phẩm để bỏ size (nút ×) hoặc thêm size từ danh sách →
+            bấm <strong>Lưu</strong> ở cuối dòng. Chỉ chọn được size có sẵn trên web; gõ "40,5" hay "40½" đều tìm ra 40.5.
+          </div>
+          {sizeTerms && (
+            <details>
+              <summary className="meta">Danh sách {sizeTerms.length} size có trên web</summary>
+              <div className="meta">{sortSizes(sizeTerms).join(' · ')}</div>
+            </details>
+          )}
+          <div className="verify">
+            <div className="label">Gộp size 40.5 bị trùng</div>
+            Web đang có 2 bản "40.5" khác nhau nên bộ lọc size 40.5 chỉ ra khoảng một nửa số giày. Bấm để tải các sản phẩm đang dùng bản trùng rồi
+            chuyển hết về một bản (size hiển thị không đổi).
+            <div className="inline" style={{ marginTop: 6 }}>
+              <button className="ghost" onClick={loadMerge405} disabled={busy}>Tải danh sách cần gộp 40.5</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {items.length > 0 && (
         <>
           <div className="card settings wide stock-actions">
-            <div className="inline wrap">
-              <strong>Đã chọn {selected.size}</strong>
-              <span className="meta">→ đổi thành:</span>
-              <select value={newStock} onChange={(e) => setNewStock(e.target.value as StockStatus | '')} style={{ width: 'auto', marginTop: 0 }}>
-                <option value="">Tình trạng: giữ nguyên</option>
-                <option value="outofstock">Hết hàng</option>
-                <option value="instock">Còn hàng</option>
-              </select>
-              <select value={newVis} onChange={(e) => setNewVis(e.target.value as Visibility | '')} style={{ width: 'auto', marginTop: 0 }}>
-                <option value="">Hiển thị: giữ nguyên</option>
-                {VIS.map((v) => (
-                  <option key={v} value={v}>{VISIBILITY_LABEL[v]}</option>
-                ))}
-              </select>
-              <button onClick={apply} disabled={busy || !selected.size || (!newStock && !newVis)}>Cập nhật lên web</button>
-            </div>
-            <div className="meta">
-              Hiển thị: <strong>Cửa hàng & tìm kiếm</strong> = hiện bình thường · <strong>Chỉ khi tìm kiếm</strong> = không hiện trong danh mục nhưng khách
-              vẫn tìm thấy · <strong>Ẩn</strong> = không hiện ở đâu (vẫn mở được bằng link trực tiếp).
-            </div>
+            {tab === 'stock' ? (
+              <div className="inline wrap">
+                <strong>Đã chọn {selected.size}</strong>
+                <span className="meta">→ đổi thành:</span>
+                <select value={newStock} onChange={(e) => setNewStock(e.target.value as StockStatus | '')} style={{ width: 'auto', marginTop: 0 }}>
+                  <option value="">Tình trạng: giữ nguyên</option>
+                  <option value="outofstock">Hết hàng</option>
+                  <option value="instock">Còn hàng</option>
+                </select>
+                <select value={newVis} onChange={(e) => setNewVis(e.target.value as Visibility | '')} style={{ width: 'auto', marginTop: 0 }}>
+                  <option value="">Hiển thị: giữ nguyên</option>
+                  {VIS.map((v) => (
+                    <option key={v} value={v}>{VISIBILITY_LABEL[v]}</option>
+                  ))}
+                </select>
+                <button onClick={applyStock} disabled={busy || !selected.size || (!newStock && !newVis)}>Cập nhật lên web</button>
+              </div>
+            ) : (
+              <div className="inline wrap">
+                {tab === 'size' && dirtyItems.length > 0 && (
+                  <button onClick={saveAllSizes} disabled={busy}>Lưu tất cả {dirtyItems.length} mã đã sửa size</button>
+                )}
+                {tab === 'price' && dirtyPriceItems.length > 0 && (
+                  <button onClick={saveAllPrices} disabled={busy}>Lưu tất cả {dirtyPriceItems.length} mã đã sửa giá</button>
+                )}
+                {pending.size > 0 && (
+                  <button onClick={applyPending} disabled={busy || !pendingCount}>Cập nhật {pendingCount || ''} sản phẩm lên web</button>
+                )}
+                {pending.size > 0 && (
+                  <button className="link" onClick={() => (setPending(new Map()), setPendingNote(null))} disabled={busy}>Xóa xem trước</button>
+                )}
+              </div>
+            )}
+            {tab === 'stock' && (
+              <div className="meta">
+                Hiển thị: <strong>Cửa hàng & tìm kiếm</strong> = hiện bình thường · <strong>Chỉ khi tìm kiếm</strong> = không hiện trong danh mục nhưng khách vẫn tìm
+                thấy · <strong>Ẩn</strong> = không hiện ở đâu (vẫn mở được bằng link trực tiếp).
+              </div>
+            )}
+            {pendingNote && tab !== 'stock' && <pre className="run-log">{pendingNote}</pre>}
             {progress && (
               <div className="meta">
                 ⏳ {progress.label} {progress.done}/{progress.total}…
@@ -286,9 +714,7 @@ export function StockManager({ history }: { history: RunSummary[] }) {
                 ))}
               </select>
               <span className="meta">{filtered.length} sản phẩm</span>
-              {selected.size > 0 && (
-                <button className="link" onClick={() => setSelected(new Set())}>Bỏ chọn tất cả</button>
-              )}
+              {selected.size > 0 && <button className="link" onClick={() => setSelected(new Set())}>Bỏ chọn tất cả</button>}
             </div>
             <div className="scroll">
               <table>
@@ -310,27 +736,100 @@ export function StockManager({ history }: { history: RunSummary[] }) {
                       />
                     </th>
                     <th>Sản phẩm ({allFilteredSelected ? `đã chọn cả ${filtered.length}` : 'ô trên cùng = chọn tất cả đang lọc'})</th>
-                    <th>Tình trạng</th>
-                    <th>Hiển thị</th>
+                    {tab === 'stock' && (
+                      <>
+                        <th>Tình trạng</th>
+                        <th>Hiển thị</th>
+                      </>
+                    )}
+                    {tab === 'price' && (
+                      <>
+                        <th>Giá (sửa trực tiếp)</th>
+                        <th>Lưu</th>
+                      </>
+                    )}
+                    {tab === 'size' && (
+                      <>
+                        <th>Size (bấm để sửa)</th>
+                        <th>Lưu</th>
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
-                  {shown.map((p) => (
-                    <tr key={p.id} onClick={() => toggle(p.id)} style={{ cursor: 'pointer' }}>
-                      <td>
-                        <input type="checkbox" checked={selected.has(p.id)} readOnly style={{ width: 16, margin: 0 }} />
-                      </td>
-                      <td>
-                        <a href={p.permalink} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>{p.name}</a>
-                        <div className="meta">
-                          {p.sku || 'không có mã'}
-                          {p.status !== 'publish' && ` · ${p.status === 'draft' ? 'nháp' : p.status}`}
-                        </div>
-                      </td>
-                      <td className={p.stock_status === 'outofstock' ? 'warn' : 'on'}>{STOCK_LABEL[p.stock_status] ?? p.stock_status}</td>
-                      <td>{VISIBILITY_LABEL[p.catalog_visibility] ?? p.catalog_visibility}</td>
-                    </tr>
-                  ))}
+                  {shown.map((p) => {
+                    const c = pending.get(p.id);
+                    const reg = num(p.regular_price);
+                    const sale = num(p.sale_price);
+                    return (
+                      <tr
+                        key={p.id}
+                        onClick={tab === 'stock' ? () => toggle(p.id) : undefined}
+                        style={{ cursor: tab === 'stock' ? 'pointer' : 'default' }}
+                        className={(tab === 'size' && isDirty(p)) || (tab === 'price' && isPriceDirty(p)) ? 'row-dirty' : ''}
+                      >
+                        <td onClick={tab === 'stock' ? undefined : () => toggle(p.id)} style={{ cursor: 'pointer' }}>
+                          <input type="checkbox" checked={selected.has(p.id)} readOnly style={{ width: 16, margin: 0 }} />
+                        </td>
+                        <td>
+                          <a href={p.permalink} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>{p.name}</a>
+                          <div className="meta">
+                            {p.sku || 'không có mã'}
+                            {p.status !== 'publish' && ` · ${p.status === 'draft' ? 'nháp' : p.status}`}
+                          </div>
+                        </td>
+                        {tab === 'stock' && (
+                          <>
+                            <td className={p.stock_status === 'outofstock' ? 'warn' : 'on'}>{STOCK_LABEL[p.stock_status] ?? p.stock_status}</td>
+                            <td>{VISIBILITY_LABEL[p.catalog_visibility] ?? p.catalog_visibility}</td>
+                          </>
+                        )}
+                        {tab === 'price' && (
+                          <>
+                            <td>
+                              <PriceEditor
+                                value={priceOf(p)}
+                                original={{ regular: reg, sale }}
+                                disabled={priceStatus.get(p.id)?.state === 'saving'}
+                                onChange={(v) => editPrice(p.id, v)}
+                              />
+                            </td>
+                            <td style={{ whiteSpace: 'nowrap' }}>
+                              <RowSaveCell
+                                dirty={isPriceDirty(p)}
+                                status={priceStatus.get(p.id)}
+                                onSave={() => void savePrice(p).then(() => router.refresh())}
+                              />
+                            </td>
+                          </>
+                        )}
+                        {tab === 'size' && (
+                          <>
+                            <td>
+                              {c?.kind === 'merge_size' ? (
+                                <span className="meta">{p.sizes.join(', ')} · chờ gộp 40.5</span>
+                              ) : (
+                                <SizeEditor
+                                  value={sizeDraft.get(p.id) ?? p.sizes}
+                                  original={p.sizes}
+                                  terms={sizeTerms}
+                                  disabled={sizeStatus.get(p.id)?.state === 'saving'}
+                                  onChange={(v) => editSize(p.id, v)}
+                                />
+                              )}
+                            </td>
+                            <td style={{ whiteSpace: 'nowrap' }}>
+                              <RowSaveCell
+                                dirty={isDirty(p)}
+                                status={sizeStatus.get(p.id)}
+                                onSave={() => void saveSize(p).then(() => router.refresh())}
+                              />
+                            </td>
+                          </>
+                        )}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -364,14 +863,18 @@ export function StockManager({ history }: { history: RunSummary[] }) {
                 <td>{r.who}</td>
                 <td>
                   {r.undoOf ? 'Hoàn tác: ' : ''}
+                  {r.kind === 'price' ? 'Giá · ' : r.kind === 'size' ? 'Size · ' : r.kind === 'merge_size' ? 'Gộp size 40.5 · ' : ''}
                   {r.count} sản phẩm
                   {r.toOut > 0 && ` · ${r.toOut} → hết hàng`}
                   {r.toIn > 0 && ` · ${r.toIn} → còn hàng`}
                   {Object.entries(r.visibility).map(([v, n]) => ` · ${n} → ${VISIBILITY_LABEL[v as Visibility] ?? v}`)}
+                  {r.regularChanged > 0 && ` · ${r.regularChanged} đổi giá niêm yết`}
+                  {r.saleOn > 0 && ` · ${r.saleOn} đặt giá sale`}
+                  {r.saleOff > 0 && ` · ${r.saleOff} bỏ giảm giá`}
                   {r.undone && ' (đã hoàn tác)'}
                 </td>
                 <td>
-                  {!r.undone && !r.undoOf && (
+                  {!r.undone && !r.undoOf && r.kind !== 'merge_size' && (
                     <button className="ghost small" disabled={busy} onClick={() => undo(r)}>Hoàn tác</button>
                   )}
                 </td>

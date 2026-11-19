@@ -170,3 +170,19 @@ a.video-cho { display: flex; gap: 10px; align-items: center; color: var(--text);
 details > summary { cursor: pointer; }
 .cau-hinh { display: grid; gap: 2px; font-size: 13px; min-width: 260px; }
 .cau-hinh code { font-size: 12px; }
+.size-cell { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; cursor: pointer; min-width: 220px; padding: 4px; border-radius: 6px; border: 1px dashed transparent; }
+.size-cell:hover { border-color: var(--border); }
+.size-cell.open { display: block; cursor: default; border-color: var(--accent); background: var(--bg); }
+.size-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.size-chip { display: inline-flex; align-items: center; gap: 2px; font-size: 13px; padding: 1px 8px; border-radius: 99px; border: 1px solid var(--border); background: var(--surface); }
+.size-chip.added { border-color: var(--accent); color: var(--accent); }
+.size-x { background: none; border: none; color: var(--muted); padding: 0 0 0 4px; font-size: 14px; line-height: 1; cursor: pointer; }
+.size-x:hover { color: var(--warn); }
+.size-suggest { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; max-height: 130px; overflow: auto; }
+.size-edit-hint { margin-left: 4px; }
+tr.row-dirty td { background: color-mix(in srgb, var(--warn) 8%, transparent); }
+.price-cell { min-width: 260px; }
+.price-inputs { display: flex; gap: 8px; }
+.price-inputs label { display: grid; flex: 1; font-size: 12px; }
+.price-inputs input { margin-top: 2px; padding: 5px 8px; text-align: right; }
+.price-inputs input.changed { border-color: var(--accent); color: var(--accent); font-weight: 600; }

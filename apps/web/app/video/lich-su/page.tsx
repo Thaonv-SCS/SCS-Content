@@ -43,7 +43,7 @@ export default async function LichSuVideoPage({ searchParams }: { searchParams: 
 
   return (
     <>
-      <p><Link href="/video">← Video</Link></p>
+      <p><Link href="/video">← Video editor</Link></p>
       <h1>Lịch sử video — tất cả máy</h1>
 
       <div className="card settings wide">
@@ -77,7 +77,7 @@ export default async function LichSuVideoPage({ searchParams }: { searchParams: 
       </div>
       <div className="card scroll">
         <table>
-          <thead><tr><th>Video</th><th>Máy</th><th>Trạng thái</th><th>Ai tạo</th><th>Tạo / cập nhật</th><th>Phút công</th><th>Chi phí AI</th></tr></thead>
+          <thead><tr><th>Video</th><th>Máy</th><th>Trạng thái</th><th>Người làm</th><th>Tạo / cập nhật</th><th>Phút công</th><th>Chi phí AI</th></tr></thead>
           <tbody>
             {ds.map((v) => (
               <tr key={v.id}>

@@ -62,7 +62,7 @@ export default async function VideoChiTiet({ params }: { params: Promise<{ id: s
   return (
     <>
       <TuLamMoi bat={mayDangLam(v.trang_thai)} />
-      <p><Link href="/video">← Video</Link></p>
+      <p><Link href="/video">← Video editor</Link></p>
       <div className="inline title-row">
         <h1>{v.ten}</h1>
         <span className={`badge ${v.trang_thai === 'loi' ? 'warn' : ''}`}>{nhanTrangThai(v.trang_thai)}</span>

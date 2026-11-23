@@ -52,7 +52,7 @@ export default async function MayWorkerPage() {
 
   return (
     <>
-      <p><Link href="/video">← Video</Link></p>
+      <p><Link href="/video">← Video editor</Link></p>
       <h1>Máy worker</h1>
       <p className="muted">
         Chỉ admin thấy trang này. Bật <strong>nhận việc</strong> cho bao nhiêu máy cũng được: video mới <strong>tự giao cho máy đang chứa

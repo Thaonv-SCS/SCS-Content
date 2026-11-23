@@ -50,6 +50,18 @@ export const CATEGORIES: CostCategory[] = [
       sua: 'Sửa theo góp ý',
     },
   },
+  {
+    key: 'du-an',
+    label: 'Dự án video',
+    steps: {
+      'doc-du-lieu': 'Đọc dữ liệu khán giả',
+      insight: 'Tóm tắt insight khán giả',
+      'y-tuong': 'Phát triển ý tưởng',
+      'ke-hoach': 'Kế hoạch nội dung',
+      'kich-ban': 'Viết kịch bản',
+      'bai-hoc': 'Rút bài học',
+    },
+  },
   { key: 'image', label: 'Làm ảnh', steps: {} },
   { key: 'voice', label: 'Giọng nói (voice)', steps: {} },
 ];

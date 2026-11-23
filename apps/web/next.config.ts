@@ -6,7 +6,7 @@ try {
 } catch {}
 
 const config: NextConfig = {
-  transpilePackages: ['@app/core', '@app/connectors', '@app/products'],
+  transpilePackages: ['@app/core', '@app/connectors', '@app/products', '@app/du-an'],
   // Up ảnh: mỗi lần gửi một ảnh đã thu nhỏ (~150–400KB); để dư cho ảnh nhiều chi tiết
   experimental: { serverActions: { bodySizeLimit: '4mb' } },
 };

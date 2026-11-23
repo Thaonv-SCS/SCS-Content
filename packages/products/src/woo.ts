@@ -4,6 +4,8 @@
  * - Ghi (cần WOO_CONSUMER_KEY / WOO_CONSUMER_SECRET): chỉ TẠO BẢN NHÁP — không có lệnh đăng hay sửa sản phẩm đang bán.
  */
 
+import { exampleToText } from './html.ts';
+
 export const WOO_URL = (process.env.WOO_URL || 'https://soccerstore.vn').replace(/\/+$/, '');
 /**
  * Header gửi kèm mọi request tới web. SITE_ACCESS_TOKEN = mã bí mật để Cloudflare nhận ra app và cho đi qua
@@ -121,6 +123,64 @@ export async function fetchExamplesByIds(ids: number[]): Promise<WooExample[]> {
     `${WOO_URL}/wp-json/wc/store/v1/products?per_page=100&include=${ids.slice(0, 100).join(',')}`,
   );
   return withFullContent(store);
+}
+
+/** Dữ kiện một sản phẩm cho Dự án video (nguồn chuẩn: giá, size, còn hàng, mô tả đang đăng trên web). */
+export interface ProductFacts {
+  link: string;
+  name: string;
+  sku: string | null;
+  gia: string;
+  gia_goc: string | null;
+  con_hang: boolean;
+  size: string[];
+  mo_ta_ngan: string;
+  mo_ta: string;
+}
+
+/** Link sản phẩm trên web → dữ kiện. Link không phải trang sản phẩm / không tìm thấy thì bỏ qua (trả về trong `khong_thay`). */
+export async function fetchProductFacts(urls: string[]): Promise<{ items: ProductFacts[]; khong_thay: string[] }> {
+  const bySlug = new Map<string, string>();
+  for (const u of urls) {
+    const s = slugFromProductUrl(u);
+    if (s) bySlug.set(s, u);
+  }
+  const khong_thay = urls.filter((u) => !slugFromProductUrl(u));
+  if (!bySlug.size) return { items: [], khong_thay };
+  const found = await getJson<{ id: number; slug: string }[]>(
+    `${WOO_URL}/wp-json/wp/v2/product?per_page=100&slug=${[...bySlug.keys()].join(',')}&_fields=id,slug`,
+  );
+  for (const [s, u] of bySlug) if (!found.some((f) => f.slug.toLowerCase() === s)) khong_thay.push(u);
+  if (!found.length) return { items: [], khong_thay };
+  type StoreFull = StoreProduct & {
+    is_in_stock: boolean;
+    prices: { price: string; regular_price: string; sale_price: string; currency_minor_unit: number };
+    attributes: { name: string; terms: { name: string }[] }[];
+  };
+  const [store, full] = await Promise.all([
+    getJson<StoreFull[]>(`${WOO_URL}/wp-json/wc/store/v1/products?per_page=100&include=${found.map((f) => f.id).join(',')}`),
+    fetchExamplesByIds(found.map((f) => f.id)),
+  ]);
+  const vnd = (minor: string, unit: number) => `${Math.round(Number(minor) / 10 ** unit).toLocaleString('vi-VN')}đ`;
+  const text = (html: string, max: number) => exampleToText(html, max);
+  return {
+    items: store.map((p) => {
+      const f = full.find((x) => x.woo_id === p.id);
+      const giam = p.prices.sale_price && p.prices.sale_price !== p.prices.regular_price;
+      return {
+        link: p.permalink,
+        name: decode(p.name),
+        sku: p.sku || null,
+        gia: vnd(p.prices.price, p.prices.currency_minor_unit),
+        gia_goc: giam ? vnd(p.prices.regular_price, p.prices.currency_minor_unit) : null,
+        con_hang: p.is_in_stock,
+        size: p.attributes.find((a) => /size/i.test(a.name))?.terms.map((t) => t.name) ?? [],
+        mo_ta_ngan: text(p.short_description, 600),
+        mo_ta: text(f?.description_html ?? '', 3000),
+      };
+    }),
+    khong_thay,
+  };
 }
 
 /** Lấy slug sản phẩm từ link trên web, vd https://soccerstore.vn/san-pham/abc-xyz/ → "abc-xyz". */

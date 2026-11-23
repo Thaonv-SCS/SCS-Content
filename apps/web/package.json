@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@app/connectors": "*",
+    "@app/du-an": "*",
     "@app/core": "*",
     "@app/products": "*",
     "@supabase/ssr": "^0.12.7",

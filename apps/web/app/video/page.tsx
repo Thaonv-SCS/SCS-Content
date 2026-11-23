@@ -26,7 +26,7 @@ export default async function VideoPage() {
     <>
       <TuLamMoi bat={ds.some((v) => mayDangLam(v.trang_thai))} giay={15} />
       <div className="inline title-row">
-        <h1>Video</h1>
+        <h1>Video editor</h1>
         {me.videoQuyen.includes('lam') && <Link href="/video/moi" className="button">+ Tạo video</Link>}
         {me.role === 'admin' && (
           <>

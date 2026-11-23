@@ -139,10 +139,10 @@ export async function CostReport({ supabase, ky }: { supabase: SupabaseClient; k
   const { tu, den, nhan } = khoang(ky);
 
   const [gan, ds, { data: nguoi }, { data: caiDat }] = await Promise.all([
-    docTatCa(supabase, bay < dauThang ? bay : dauThang, null, 'cost_usd,created_at,job_id'),
+    docTatCa(supabase, bay < dauThang ? bay : dauThang, null, 'cost_usd,created_at,job_id,purpose'),
     docTatCa(supabase, tu, den, 'purpose,model,cost_usd,created_at,created_by,job_id,tokens_in,tokens_out'),
     supabase.from('profiles').select('user_id,display_name,role'),
-    supabase.from('settings').select('key,value').in('key', ['daily_budget_usd', 'video_tran_ngay_usd']),
+    supabase.from('settings').select('key,value').in('key', ['daily_budget_usd', 'video_tran_ngay_usd', 'du_an_tran_ngay_usd']),
   ]);
   const tran = (k: string, mac: number) => Number(caiDat?.find((r) => r.key === k)?.value ?? mac);
 
@@ -151,7 +151,9 @@ export async function CostReport({ supabase, ky }: { supabase: SupabaseClient; k
   const sum = (rows: { cost_usd: number | string }[]) => rows.reduce((s, r) => s + Number(r.cost_usd), 0);
   const homNayRows = gan.filter((r) => new Date(r.created_at).getTime() >= tHomNay);
   const homNayVideo = sum(homNayRows.filter((r) => r.job_id));
-  const homNayKhac = sum(homNayRows.filter((r) => !r.job_id));
+  const laDuAn = (r: { purpose?: string }) => !!r.purpose?.startsWith('du-an:');
+  const homNayDuAn = sum(homNayRows.filter((r) => !r.job_id && laDuAn(r)));
+  const homNayKhac = sum(homNayRows.filter((r) => !r.job_id && !laDuAn(r)));
   const bayNgay = sum(gan.filter((r) => new Date(r.created_at) >= bay));
   const thangNay = sum(gan.filter((r) => new Date(r.created_at) >= dauThang));
   const ngayThu = Number(homNay.slice(8, 10));
@@ -228,11 +230,13 @@ export async function CostReport({ supabase, ky }: { supabase: SupabaseClient; k
       <div className="cost-tiles">
         <div className="card">
           <div className="meta">Hôm nay</div>
-          <div className="cost-big">{usd(homNayKhac + homNayVideo)}</div>
+          <div className="cost-big">{usd(homNayKhac + homNayVideo + homNayDuAn)}</div>
           <div className="meta">
             Bản tin + sản phẩm {usd(homNayKhac)} / trần ${tran('daily_budget_usd', 3)}
             <br />
             Video {usd(homNayVideo)} / trần ${tran('video_tran_ngay_usd', 8)}
+            <br />
+            Dự án video {usd(homNayDuAn)} / trần ${tran('du_an_tran_ngay_usd', 3)}
           </div>
         </div>
         <div className="card">

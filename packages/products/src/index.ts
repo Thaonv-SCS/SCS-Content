@@ -3,6 +3,8 @@ export {
   createDraftProduct,
   checkWooAccess,
   WOO_URL,
+  fetchProductFacts,
+  type ProductFacts,
   type DraftInput,
   type WooCategory,
 } from './woo.ts';

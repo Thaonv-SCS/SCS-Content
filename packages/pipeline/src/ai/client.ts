@@ -29,6 +29,7 @@ export class Budget {
       .from('llm_calls')
       .select('cost_usd')
       .is('job_id', null) // tiền video có trần riêng (video_tran_ngay_usd), không tính vào trần bản tin
+      .not('purpose', 'like', 'du-an:%') // Dự án video cũng có trần riêng (du_an_tran_ngay_usd)
       .gte('created_at', new Date(`${today}T00:00:00+07:00`).toISOString());
     if (error) throw error;
     this.spent = (data ?? []).reduce((s, r: { cost_usd: number | string }) => s + Number(r.cost_usd), 0);

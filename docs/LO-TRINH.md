@@ -1,10 +1,16 @@
 # Lộ trình phát triển — Soccerstore Content
 
-Cập nhật: 2026-11-19. File này tổng hợp **đã làm gì, đang ở đâu, dự kiến làm gì**. Mỗi khi xong một mốc hoặc chốt hướng mới thì sửa file này.
+Cập nhật: 2026-11-20. File này tổng hợp **đã làm gì, đang ở đâu, dự kiến làm gì**. Mỗi khi xong một mốc hoặc chốt hướng mới thì sửa file này.
 
 App gồm 2 repo:
-- **Content APP** (`github.com/Thaonv-SCS/SCS-Content`): web trên Netlify + database Supabase. Chứa bản tin, Post sản phẩm, Cập nhật sản phẩm, Up ảnh, và **giao diện** module Video.
+- **Content APP** (`github.com/Thaonv-SCS/SCS-Content`): web trên Netlify + database Supabase. Chứa bản tin, Post sản phẩm, Cập nhật sản phẩm, Up ảnh, Dự án video (tiền kỳ), và **giao diện** Video editor.
 - **SCS Video Studio** (`github.com/Thaonv-SCS/SCS-Video-Studio`): phần **dựng video** chạy trên máy worker (bộ não Claude, ffmpeg). Chi tiết kỹ thuật: `BAN-DO-KY-THUAT.md` trong repo đó.
+
+## Đang ở đâu (xem nhanh)
+- 🔄 **Đang làm:** Dự án video — giai đoạn A, phần A1 + A2 (kho tri thức, quy trình ý tưởng → kế hoạch → kịch bản). Chi tiết: `docs/KE-HOACH-DU-AN-VIDEO.md`.
+- 🔄 **Đang chạy thật:** Video editor V3 — giai đoạn 4 (5–10 video thật để đo).
+- 📥 **Chủ shop đang chuẩn bị:** trả lời bảng câu hỏi Thương hiệu, file số liệu + bình luận FB / TikTok / YouTube, video mẫu cho 6 khuôn.
+- ⏳ **Chờ:** Dự án video giai đoạn B, C · Video editor V2 · Giai đoạn 2, 3.
 
 ## Tổng quan
 
@@ -12,7 +18,8 @@ App gồm 2 repo:
 |---|---|---|
 | Giai đoạn 1 | Bản tin ý tưởng content mỗi ngày | ✅ Xong 2026-11-11 (tag `giai-doan-1`) |
 | Giai đoạn 1.5 | Viết content + quản lý sản phẩm WooCommerce | ✅ Xong 2026-11-18 |
-| Module Video | Dựng video ngắn tự động (V1 → V3 → V2) | 🔄 V3 đang chạy thật (giai đoạn 4) |
+| Video editor | Dựng video ngắn tự động từ footage (V1 → V3 → V2) | 🔄 V3 đang chạy thật (giai đoạn 4) |
+| Dự án video | Tiền kỳ: ý tưởng → kế hoạch → kịch bản → shotlist → nối Video editor (A → B → C) | 🔄 Đang làm giai đoạn A — `docs/KE-HOACH-DU-AN-VIDEO.md` |
 | Giai đoạn 2 | Phân tích hình ảnh để học gu | ⏳ Chưa làm |
 | Giai đoạn 3 | Mẫu ảnh đăng bài (template) | ⏳ Chưa làm |
 
@@ -48,7 +55,7 @@ Mỗi sáng tổng hợp tin giày & bóng đá, gợi ý bài đăng. Không ba
 
 **Hạ tầng làm trong giai đoạn này:** gọi web qua Cloudflare bằng mã bí mật `SITE_ACCESS_TOKEN` (luật Cloudflare 1/4/5, đã tắt Bot Fight Mode).
 
-## Module Video 🔄
+## Video editor (trước gọi là module Video) 🔄
 Dựng video ngắn dọc 9:16 (TikTok / Reels / Shorts) từ footage có lời nói sẵn, 15–20 video/tuần. Trước đây dựng tay ~2 giờ/video.
 
 | Bản | Nội dung | Trạng thái |
@@ -60,6 +67,11 @@ Dựng video ngắn dọc 9:16 (TikTok / Reels / Shorts) từ footage có lời 
 - Chi phí đo thật: $1,07–1,53/video; trần $8/ngày.
 - Tiêu chí giai đoạn 4: ≤ 60 phút công người/video, ≥ 7/10 bản nháp dùng được (số liệu ở Video → Lịch sử tất cả máy).
 - Việc còn lại: cài thử máy công ty; nút "Dựng lại không tốn AI"; giới hạn tải lên 50 MB/file (file nặng chép USB); thêm phong cách mới khi có video mẫu.
+
+## Dự án video (tiền kỳ) 🔄
+App làm như một đội sản xuất: strategist → scriptwriter → director → editor. Nhập 1 ý tưởng → ① Ý tưởng → ② Kế hoạch nội dung → ③ Kịch bản → ④ Đạo diễn + shotlist → quay → Video editor. Chọn *làm nhanh* (tự chạy) hoặc *qua các bước duyệt*.
+- Giai đoạn A (đang làm): kho tri thức (thương hiệu, dữ liệu khán giả, 6 khuôn video) + ý tưởng → kế hoạch → kịch bản. B: shotlist + nối editor. C: lịch đăng, caption, số liệu sau đăng → học lại.
+- Trần chi phí riêng $3/ngày (chỉnh được). Chi tiết, trạng thái từng phần, việc chủ shop chuẩn bị: `docs/KE-HOACH-DU-AN-VIDEO.md`.
 
 ## Giai đoạn 2 — Phân tích hình ảnh để học gu ⏳
 AI xem ảnh (cầu thủ, giày, bối cảnh) trong các tin mày Chọn / Bỏ ở bản tin → hiểu gu, chọn tin và ảnh sát gu hơn.
@@ -77,7 +89,7 @@ Làm ảnh đăng bài theo mẫu (template) của shop. Chi tiết: bàn và ch
 
 ## Quy ước làm việc
 - **Đẩy code:** thử kỹ trên máy, chỉ commit + đẩy khi chủ shop chốt. Gộp nhiều thay đổi vào 1 lần đẩy (Netlify gói miễn phí 300 credit/tháng).
-- **Migration Supabase:** số tăng dần, lấy số kế tiếp sau số lớn nhất hiện có (hiện tới `0018`). Chạy migration trên Supabase **trước** khi đẩy code dùng nó.
+- **Migration Supabase:** số tăng dần, lấy số kế tiếp sau số lớn nhất hiện có (hiện tới `0022`). Chạy migration trên Supabase **trước** khi đẩy code dùng nó.
 - **Module Video:** sửa trên bản sao `D:\SCS Video Studio dev` (laptop chủ shop là máy worker thật, chạy code từ `D:\SCS Video Studio`). Việc chạm cả app lẫn worker: đẩy theo thứ tự database → worker → web.
 - **Mốc phiên bản (tag git):** `giai-doan-N` cho app, `video-vN` cho Video; đánh dấu khi xong một giai đoạn / bản lớn.
 - **Chi phí AI / dịch vụ trả phí:** mọi lần gọi ghi vào bảng `llm_calls` với `purpose = "<loại>:<bước>"` (vd `image:tao-anh`, `voice:doc-loi`) → tự hiện ở Cài đặt → Chi phí AI. Thêm tên tiếng Việt cho loại / bước ở `packages/core/src/costs.ts`. Chi phí của 1 video ghi kèm `job_id` (tính vào trần video, không tính vào trần bản tin + sản phẩm).
@@ -92,3 +104,4 @@ Làm ảnh đăng bài theo mẫu (template) của shop. Chi tiết: bàn và ch
 | 2026-11-16–17 | Content APP | Module Video trên app (V3 giai đoạn 2–3), nhiều máy, quyền footage |
 | 2026-11-17 | Video Studio | Worker chạy ngầm, chịu lỗi mạng, kiểm tra cấu hình máy |
 | 2026-11-18 | Content APP | Cập nhật sản phẩm: giá + size sửa trên dòng, gộp size 40.5; lộ trình này |
+| 2026-11-19 | Content APP | Chi phí AI gộp ở Cài đặt (tách trần video), dán nội dung soạn sẵn, hết hàng bỏ giá sale, thanh "Lưu tất cả" giá / size |

@@ -226,7 +226,7 @@ export async function chayYTuong(db: SupabaseClient, d: DuAnRow, bc: BoiCanh, ye
       `## VIỆC CỦA MÀY: PHÁT TRIỂN Ý TƯỞNG (vai content strategist)
 1. tom_tat_brief: hiểu brief thế nào, 2–3 câu.
 2. insight: 2–4 insight người xem liên quan ý tưởng này. bang_chung = trích / dẫn từ insight khán giả đã duyệt; gia_dinh = true nếu là suy luận chưa có dữ liệu.
-3. goc: ĐÚNG 3 góc khai thác khác hẳn nhau. Mỗi góc: khuon = mã khuôn (review / top / hoi-dap / storytelling / so-sanh / meo${d.brief.khuon ? `; chủ shop muốn khuôn "${d.brief.khuon}", ít nhất 2 góc dùng khuôn này` : ''}); vi_sao hợp với khách và mục tiêu; uu / nhuoc / rui_ro (cụ thể, mỗi mục 1–3 ý; rủi ro gồm cả khó quay, dễ nói sai, dễ nhàm);
+3. goc: ĐÚNG 3 góc khai thác khác hẳn nhau. Mỗi góc: khuon = mã khuôn (một trong: ${bc.khuon.map((k) => k.ma).join(' / ')}${d.brief.khuon ? `; chủ shop muốn khuôn "${d.brief.khuon}", ít nhất 2 góc dùng khuôn này` : ''}); vi_sao hợp với khách và mục tiêu; uu / nhuoc / rui_ro (cụ thể, mỗi mục 1–3 ý; rủi ro gồm cả khó quay, dễ nói sai, dễ nhàm);
    diem 1–5: hap_dan (giữ người xem), ban_hang (đẩy mục tiêu), de_quay (5 = quay một buổi ở shop là xong); hook = 2–3 câu mở đầu nói được trong 3 giây.
 4. de_xuat: góc số mấy (1–3) là tốt nhất + lý do so với 2 góc kia.
 5. cau_hoi: điều cần chủ shop trả lời / xác nhận trước khi viết kịch bản (vd cam kết, có quay được ở sân không). Không có thì để mảng rỗng.`,

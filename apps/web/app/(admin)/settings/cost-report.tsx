@@ -2,6 +2,7 @@ import { Fragment } from 'react';
 import Link from 'next/link';
 import { classifyCost, modelLabel } from '@app/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { luuSoDuClaude } from './actions';
 
 const TZ = 'Asia/Ho_Chi_Minh';
 
@@ -137,18 +138,24 @@ export async function CostReport({ supabase, ky }: { supabase: SupabaseClient; k
   const dauThang = dauNgay(`${homNay.slice(0, 7)}-01`);
   const bay = new Date(dauNgay(homNay).getTime() - 6 * 86400_000);
   const { tu, den, nhan } = khoang(ky);
+  const sum = (rows: { cost_usd: number | string }[]) => rows.reduce((s, r) => s + Number(r.cost_usd), 0);
 
   const [gan, ds, { data: nguoi }, { data: caiDat }] = await Promise.all([
     docTatCa(supabase, bay < dauThang ? bay : dauThang, null, 'cost_usd,created_at,job_id,purpose'),
     docTatCa(supabase, tu, den, 'purpose,model,cost_usd,created_at,created_by,job_id,tokens_in,tokens_out'),
     supabase.from('profiles').select('user_id,display_name,role'),
-    supabase.from('settings').select('key,value').in('key', ['daily_budget_usd', 'video_tran_ngay_usd', 'du_an_tran_ngay_usd']),
+    supabase.from('settings').select('key,value').in('key', ['daily_budget_usd', 'video_tran_ngay_usd', 'du_an_tran_ngay_usd', 'so_du_claude']),
   ]);
+  // ── Số dư Claude ước tính = số dư mày nhập lúc mốc − chi phí Claude app ghi được từ mốc (bỏ ElevenLabs…)
+  const moc = caiDat?.find((r) => r.key === 'so_du_claude')?.value as { so_du: number; tham_chieu: number; luc: string } | undefined;
+  const daDung = moc
+    ? sum((await docTatCa(supabase, new Date(moc.luc), null, 'cost_usd,model')).filter((r) => r.model?.startsWith('claude')))
+    : 0;
+  const conLai = moc ? moc.so_du - daDung : 0;
   const tran = (k: string, mac: number) => Number(caiDat?.find((r) => r.key === k)?.value ?? mac);
 
   // ── Ô số lớn
   const tHomNay = dauNgay(homNay).getTime();
-  const sum = (rows: { cost_usd: number | string }[]) => rows.reduce((s, r) => s + Number(r.cost_usd), 0);
   const homNayRows = gan.filter((r) => new Date(r.created_at).getTime() >= tHomNay);
   const homNayVideo = sum(homNayRows.filter((r) => r.job_id));
   const laDuAn = (r: { purpose?: string }) => !!r.purpose?.startsWith('du-an:');
@@ -228,6 +235,38 @@ export async function CostReport({ supabase, ky }: { supabase: SupabaseClient; k
   return (
     <>
       <div className="cost-tiles">
+        <div className="card">
+          <div className="meta">Số dư Claude (ước tính)</div>
+          {moc ? (
+            <>
+              <div className={`cost-big${conLai < moc.tham_chieu * 0.2 ? ' warn' : ''}`}>
+                còn {usd(Math.max(conLai, 0))} <span className="meta">/ ${moc.tham_chieu}</span>
+              </div>
+              <Thanh pct={pctOf(Math.max(conLai, 0), moc.tham_chieu)} />
+              <div className="meta">
+                {conLai < moc.tham_chieu * 0.2 && <><span className="warn">Sắp hết — nạp thêm ở console.anthropic.com</span><br /></>}
+                Mốc ${moc.so_du} lúc {new Date(moc.luc).toLocaleString('vi-VN', { timeZone: TZ, dateStyle: 'short', timeStyle: 'short' })}, đã dùng {usd(daDung)} từ đó
+              </div>
+            </>
+          ) : (
+            <div className="meta">Chưa nhập số dư. Xem ở console.anthropic.com → Billing rồi nhập bên dưới.</div>
+          )}
+          <details style={{ marginTop: 6 }}>
+            <summary className="meta">Cập nhật số dư</summary>
+            <form action={luuSoDuClaude} className="settings" style={{ gap: 8, marginTop: 6 }}>
+              <label className="meta">
+                Số dư hiện tại trên console ($)
+                <input name="so_du" type="number" step="0.01" min="0" required defaultValue={moc ? Math.max(conLai, 0).toFixed(2) : ''} style={{ width: '100%' }} />
+              </label>
+              <label className="meta">
+                Mức tham chiếu ($, vd số tiền lần nạp gần nhất)
+                <input name="tham_chieu" type="number" step="0.01" min="0" defaultValue={moc?.tham_chieu ?? ''} style={{ width: '100%' }} />
+              </label>
+              <button type="submit" className="ghost">Lưu số dư</button>
+              <span className="meta">Mỗi lần nạp tiền hoặc vài tuần một lần, nhập lại số trên console cho khớp.</span>
+            </form>
+          </details>
+        </div>
         <div className="card">
           <div className="meta">Hôm nay</div>
           <div className="cost-big">{usd(homNayKhac + homNayVideo + homNayDuAn)}</div>

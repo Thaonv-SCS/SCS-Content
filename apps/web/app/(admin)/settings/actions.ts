@@ -15,3 +15,21 @@ export async function saveSettings(form: FormData) {
   await supabase.from('settings').upsert(rows, { onConflict: 'key' });
   revalidatePath('/settings');
 }
+
+/** Mốc số dư Claude do admin nhập từ console (Anthropic không có API đọc số dư) → app tự trừ chi phí ghi được từ mốc. */
+export async function luuSoDuClaude(form: FormData) {
+  const so = (k: string) => Number(String(form.get(k) ?? '').replace(',', '.'));
+  const soDu = so('so_du');
+  const thamChieu = so('tham_chieu');
+  if (!(soDu >= 0)) return;
+  const supabase = await supabaseServer();
+  await supabase.from('settings').upsert(
+    {
+      key: 'so_du_claude',
+      value: { so_du: soDu, tham_chieu: thamChieu > 0 ? Math.max(thamChieu, soDu) : soDu, luc: new Date().toISOString() },
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'key' },
+  );
+  revalidatePath('/settings');
+}

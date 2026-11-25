@@ -61,3 +61,32 @@ export function khuonChoAI(k: Khuon): string {
     .filter(Boolean)
     .join('\n');
 }
+
+/** Nội dung khởi đầu cho khuôn mới tạo trống. */
+export const khuonTrong = (): NoiDungKhuon => ({
+  muc_tieu: '',
+  khi_nao_dung: '',
+  do_dai: '60–90 giây',
+  nguoi_noi: '1 người',
+  nhip: [
+    { ten: 'Hook', mo_ta: 'Câu mở gây tò mò', giay: '0–3' },
+    { ten: 'Thân', mo_ta: '', giay: '3–60' },
+    { ten: 'Kết + CTA', mo_ta: '', giay: '60–75' },
+  ],
+  hook_mau: [],
+  nen_tranh: [],
+  phong_cach_dung: 'co-ban',
+  ghi_chu: '',
+  trang_thai: 'nhap',
+});
+
+/** Tên khuôn → mã (chữ thường không dấu, nối gạch), vd "Unbox giày mới" → "unbox-giay-moi". */
+export const taoMaKhuon = (ten: string) =>
+  ten
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/đ/gi, 'd')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40) || 'khuon';

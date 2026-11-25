@@ -32,7 +32,10 @@ export { importColumns, parseImport, rowsFromPaste, IMPORT_MAX_ROWS, type Import
 export {
   uploadMedia,
   attachImagesToDescription,
+  featuredImages,
+  setFeaturedImage,
   descriptionImageCounts,
   stripImages,
+  type ThumbInfo,
   type UploadedImage,
 } from './images.ts';

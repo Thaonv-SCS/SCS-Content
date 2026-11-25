@@ -102,3 +102,40 @@ export async function attachImagesToDescription(
   await wc('POST', `/products/${productId}`, { description });
   return { before: countImages(p.description), after: countImages(description) };
 }
+
+// ───────────── Ảnh đại diện (thumb ở catalogue) ─────────────
+
+export interface ThumbInfo {
+  /** id ảnh đại diện hiện tại trong Thư viện Media (null = chưa có) */
+  id: number | null;
+  /** link bản nhỏ 150×150 để xem trước (không tải ảnh gốc 2MB) */
+  preview: string | null;
+}
+
+/** Bản 150×150 WordPress tự cắt: "abc.png" → "abc-150x150.png". */
+const ban150 = (src: string) => src.replace(/(\.[a-z0-9]+)(\?.*)?$/i, '-150x150$1');
+
+/** Ảnh đại diện hiện tại của các sản phẩm. */
+export async function featuredImages(ids: number[]): Promise<Map<number, ThumbInfo>> {
+  const out = new Map<number, ThumbInfo>();
+  for (let i = 0; i < ids.length; i += 50) {
+    const rows = await wc<{ id: number; images: { id: number; src: string }[] }[]>(
+      'GET',
+      `/products?per_page=100&status=any&include=${ids.slice(i, i + 50).join(',')}&_fields=id,images`,
+    );
+    rows.forEach((r) => {
+      const f = r.images[0];
+      out.set(r.id, f ? { id: f.id, preview: ban150(f.src) } : { id: null, preview: null });
+    });
+  }
+  return out;
+}
+
+/** Đặt ảnh đại diện: ảnh mới đứng đầu, GIỮ NGUYÊN các ảnh gallery khác. Ảnh cũ vẫn nằm trong Thư viện Media. */
+export async function setFeaturedImage(productId: number, mediaId: number): Promise<{ cu: number | null }> {
+  const p = await wc<{ images: { id: number }[] }>('GET', `/products/${productId}?_fields=images`);
+  const cu = p.images[0]?.id ?? null;
+  const gallery = p.images.slice(1).map((x) => ({ id: x.id })).filter((x) => x.id !== mediaId);
+  await wc('POST', `/products/${productId}`, { images: [{ id: mediaId }, ...gallery] });
+  return { cu };
+}

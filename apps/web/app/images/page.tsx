@@ -1,5 +1,6 @@
 import { requireTeam } from '@/lib/auth';
 import { supabaseServer } from '@/lib/supabase';
+import { ThumbUploader } from './thumb-uploader';
 import { ImageUploader } from './uploader';
 
 export default async function ImagesPage() {
@@ -15,6 +16,15 @@ export default async function ImagesPage() {
   return (
     <>
       <h1>Up ảnh sản phẩm</h1>
+
+      <h2>Ảnh đại diện (thumb ở catalogue)</h2>
+      <p className="muted">
+        Up hàng loạt ảnh đại diện — ảnh hiện ở trang danh mục và ảnh đầu tiên của sản phẩm. Đặt <strong>tên file theo SKU</strong>, chọn nhiều ảnh một lúc;
+        app tự khớp SKU, cho xem ảnh cũ / ảnh mới trước khi up.
+      </p>
+      <ThumbUploader />
+
+      <h2>Ảnh trong mô tả</h2>
       <p className="muted">
         Chọn thư mục chứa các thư mục con đặt tên theo <strong>mã sản phẩm</strong> (vd <code>Ảnh 12-11/FQ8687-446/…jpg</code>). App tự khớp mã, thu
         nhỏ ảnh về 1024px và chèn xuống <strong>cuối phần mô tả</strong> — giống up bằng trình soạn thảo WordPress. Không đụng ảnh thumb.
@@ -42,7 +52,9 @@ export default async function ImagesPage() {
                   <div className="meta">{h.sku}</div>
                 </td>
                 <td>
-                  {h.mode === 'replace' ? 'Thay' : 'Thêm'} {h.added} ảnh · {h.images_before} → {h.images_after}
+                  {h.mode === 'thumb'
+                    ? h.images_before ? 'Thay ảnh đại diện' : 'Đặt ảnh đại diện'
+                    : `${h.mode === 'replace' ? 'Thay' : 'Thêm'} ${h.added} ảnh mô tả · ${h.images_before} → ${h.images_after}`}
                 </td>
               </tr>
             ))}

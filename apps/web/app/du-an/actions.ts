@@ -7,7 +7,9 @@ import {
   buocSau,
   CAU_HOI_THUONG_HIEU,
   chuThanhNhip,
+  khuonTrong,
   runDuAnJob,
+  taoMaKhuon,
   tenBuoc,
   userClient,
   type Brief,
@@ -170,13 +172,54 @@ export async function luuKhuon(ma: string, _prev: string | null, form: FormData)
     ghi_chu: s('ghi_chu'),
   };
   const ten = s('ten');
+  const thuTu = Number(s('thu_tu'));
   const { error } = await supabase
     .from('du_an_khuon')
-    .update({ noi_dung, ...(ten ? { ten } : {}), cap_nhat_luc: new Date().toISOString() })
+    .update({
+      noi_dung,
+      ...(ten ? { ten } : {}),
+      ...(Number.isFinite(thuTu) && s('thu_tu') ? { thu_tu: Math.round(thuTu) } : {}),
+      cap_nhat_luc: new Date().toISOString(),
+    })
     .eq('ma', ma);
   if (error) return `Lỗi lưu: ${error.message}`;
   revalidatePath('/du-an', 'layout');
   return '✓ Đã lưu';
+}
+
+/** Thêm khuôn mới: trống hoặc chép từ một khuôn có sẵn (bỏ video mẫu). Xong chuyển sang trang sửa. */
+export async function taoKhuon(_prev: string | null, form: FormData): Promise<string | null> {
+  const loi = await chiAdmin();
+  if (loi) return loi;
+  const ten = String(form.get('ten') ?? '').trim();
+  if (!ten) return 'Nhập tên khuôn.';
+  const tu = String(form.get('tu') ?? '');
+  const supabase = await supabaseServer();
+  const { data: ds } = await supabase.from('du_an_khuon').select('ma,thu_tu,noi_dung');
+  const co = new Set((ds ?? []).map((k) => k.ma as string));
+  const goc = taoMaKhuon(ten);
+  let ma = goc;
+  for (let i = 2; co.has(ma); i++) ma = `${goc}-${i}`;
+  const mau = (ds ?? []).find((k) => k.ma === tu);
+  const noi_dung: NoiDungKhuon = mau ? { ...(mau.noi_dung as NoiDungKhuon), trang_thai: 'nhap', ghi_chu: '' } : khuonTrong();
+  const thu_tu = Math.max(0, ...(ds ?? []).map((k) => Number(k.thu_tu) || 0)) + 1;
+  const { error } = await supabase.from('du_an_khuon').insert({ ma, ten, thu_tu, noi_dung, video_mau: [] });
+  if (error) return `Lỗi tạo: ${error.message}`;
+  revalidatePath('/du-an', 'layout');
+  redirect(`/du-an/kho/khuon/${ma}`);
+}
+
+/** Xóa khuôn. Dự án cũ vẫn giữ nguyên kịch bản, chỉ hiện mã khuôn thay cho tên. */
+export async function xoaKhuon(ma: string): Promise<string | null> {
+  const loi = await chiAdmin();
+  if (loi) return loi;
+  const supabase = await supabaseServer();
+  const { count } = await supabase.from('du_an_khuon').select('ma', { count: 'exact', head: true });
+  if ((count ?? 0) <= 1) return 'Phải còn ít nhất 1 khuôn.';
+  const { error } = await supabase.from('du_an_khuon').delete().eq('ma', ma);
+  if (error) return `Lỗi xóa: ${error.message}`;
+  revalidatePath('/du-an', 'layout');
+  redirect('/du-an/kho/khuon');
 }
 
 export async function themVideoMau(ma: string, _prev: string | null, form: FormData): Promise<string | null> {

@@ -6,7 +6,7 @@ import { readSheet } from 'read-excel-file/browser';
 import { CAU_HOI_THUONG_HIEU, NHOM_THUONG_HIEU } from '@app/du-an/src/thuong-hieu.ts';
 import { nhipThanhChu, type NoiDungKhuon, type VideoMau } from '@app/du-an/src/khuon.ts';
 import { docFileXuat, doanPhiaShop, lapMau, type HoiThoai, type KetQua } from '@app/du-an/src/tin-nhan.ts';
-import { duyetInsight, luuKhuon, luuThuongHieu, luuTran, themDuLieu, themVideoMau, tomTatInsight, xoaDuLieu, xoaVideoMau } from './actions';
+import { duyetInsight, luuKhuon, luuThuongHieu, luuTran, taoKhuon, themDuLieu, themVideoMau, tomTatInsight, xoaDuLieu, xoaKhuon, xoaVideoMau } from './actions';
 
 const Bao = ({ msg }: { msg: string | null }) => (msg ? <span className={msg.startsWith('✓') ? 'on' : 'warn'}>{msg}</span> : null);
 
@@ -397,7 +397,13 @@ export function DuyetInsightForm({ banDangDung, banAi }: { banDangDung: string; 
 
 // ───────────── Khuôn video ─────────────
 
-export function KhuonForm({ ma, ten, noiDung, sua }: { ma: string; ten: string; noiDung: NoiDungKhuon; sua: boolean }) {
+export function KhuonForm({ ma, ten, thuTu, noiDung, sua, phongCach }: {
+  ma: string; ten: string; thuTu: number; noiDung: NoiDungKhuon; sua: boolean;
+  /** phong cách các máy dựng đang có (thư mục "Phong cach" trên máy worker) */
+  phongCach: string[];
+}) {
+  const pcHienTai = noiDung.phong_cach_dung || 'co-ban';
+  const dsPc = phongCach.includes(pcHienTai) ? phongCach : [pcHienTai, ...phongCach];
   const [msg, action, pending] = useActionState(luuKhuon.bind(null, ma), null);
   const o = (name: string, label: string, value: string, rows = 2, hint?: string) => (
     <label>
@@ -425,9 +431,20 @@ export function KhuonForm({ ma, ten, noiDung, sua }: { ma: string; ten: string; 
         </label>
         <label>
           <strong>Phong cách dựng</strong>
-          <input name="phong_cach_dung" defaultValue={noiDung.phong_cach_dung} disabled={!sua} />
+          <select name="phong_cach_dung" defaultValue={pcHienTai} disabled={!sua}>
+            {dsPc.map((p) => (
+              <option key={p} value={p}>{p}{phongCach.includes(p) ? '' : ' (chưa có trên máy dựng nào)'}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <strong>Thứ tự</strong>
+          <input name="thu_tu" type="number" defaultValue={thuTu} disabled={!sua} style={{ width: 80 }} />
         </label>
       </div>
+      {!phongCach.includes(pcHienTai) && (
+        <p className="warn">Phong cách "{pcHienTai}" chưa có trên máy dựng nào — khi dựng video theo khuôn này máy sẽ không biết dựng kiểu gì.</p>
+      )}
       {o('nhip', 'Các nhịp', nhipThanhChu(noiDung.nhip), 7, 'Mỗi dòng một nhịp: Tên | mô tả | khoảng giây (vd "Hook | Câu hỏi gây tò mò | 0–3")')}
       {o('hook_mau', 'Hook mẫu', noiDung.hook_mau.join('\n'), 4, 'Mỗi dòng một câu')}
       {o('nen_tranh', 'Nên tránh', noiDung.nen_tranh.join('\n'), 4, 'Mỗi dòng một ý')}
@@ -478,5 +495,44 @@ export function VideoMauForm({ ma, ds, sua }: { ma: string; ds: VideoMau[]; sua:
         </form>
       )}
     </div>
+  );
+}
+
+export function ThemKhuonForm({ ds }: { ds: { ma: string; ten: string }[] }) {
+  const [msg, action, pending] = useActionState(taoKhuon, null);
+  return (
+    <form action={action} className="card inline wrap" style={{ marginBottom: 12 }}>
+      <strong>Thêm khuôn</strong>
+      <input name="ten" placeholder="Tên khuôn, vd: Unbox giày mới" style={{ minWidth: 240, flex: 1, marginTop: 0 }} />
+      <select name="tu" defaultValue="" style={{ width: 'auto', marginTop: 0 }}>
+        <option value="">Bắt đầu trống</option>
+        {ds.map((k) => (
+          <option key={k.ma} value={k.ma}>Chép từ khuôn "{k.ten}"</option>
+        ))}
+      </select>
+      <button type="submit" disabled={pending}>{pending ? 'Đang tạo…' : '+ Thêm khuôn'}</button>
+      <Bao msg={msg} />
+    </form>
+  );
+}
+
+export function XoaKhuonButton({ ma, ten }: { ma: string; ten: string }) {
+  const [dang, start] = useTransition();
+  const [loi, setLoi] = useState<string | null>(null);
+  return (
+    <>
+      <button
+        type="button"
+        className="ghost danger"
+        disabled={dang}
+        onClick={() => {
+          if (!confirm(`Xóa khuôn "${ten}"? Dự án cũ đã dùng khuôn này vẫn giữ nguyên kịch bản.`)) return;
+          start(async () => setLoi(await xoaKhuon(ma)));
+        }}
+      >
+        {dang ? 'Đang xóa…' : 'Xóa khuôn'}
+      </button>
+      <Bao msg={loi} />
+    </>
   );
 }

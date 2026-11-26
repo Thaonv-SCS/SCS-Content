@@ -94,10 +94,12 @@ export async function attachImagesToDescription(
   productId: number,
   images: UploadedImage[],
   mode: 'append' | 'replace',
+  /** alt cho ảnh chèn vào (alt viết trong app); bỏ trống = tên sản phẩm */
+  altApp?: string,
 ): Promise<{ before: number; after: number }> {
   const p = await wc<{ id: number; name: string; description: string }>('GET', `/products/${productId}?context=edit&_fields=id,name,description`);
   const base = mode === 'replace' ? stripImages(p.description) : p.description.trimEnd();
-  const alt = p.name.replace(/&#8211;/g, '–').replace(/&amp;/g, '&');
+  const alt = altApp?.trim() || p.name.replace(/&#8211;/g, '–').replace(/&amp;/g, '&');
   const description = `${base}\n${images.map((img) => imageBlock(img, alt)).join('\n')}`;
   await wc('POST', `/products/${productId}`, { description });
   return { before: countImages(p.description), after: countImages(description) };

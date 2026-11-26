@@ -99,6 +99,7 @@ export function ThumbUploader() {
             fd.append('productId', String(p.id));
             fd.append('sku', p.sku);
             fd.append('name', p.name);
+            fd.append('alt', p.alt);
             const kq = await setThumb(fd);
             setSt((s) => ({ ...s, [ten]: kq.ok ? { status: 'done', message: kq.data.cu ? 'đã thay ảnh cũ' : 'đã đặt ảnh' } : { status: 'error', message: kq.error } }));
           } catch (err) {
@@ -180,7 +181,7 @@ export function ThumbUploader() {
                           <>
                             <a href={p.permalink} target="_blank" rel="noreferrer">{p.name}</a>
                             <div className="meta">
-                              {p.sku}
+                              {p.sku} · alt: {p.altApp ? <span className="on" title={p.alt}>theo app</span> : 'tên sản phẩm'}
                               {p.status !== 'publish' && ` · ${p.status === 'draft' ? 'bản nháp' : p.status}`}
                             </div>
                             {r.trung && <div className="warn">Trùng sản phẩm với ảnh khác — bỏ qua</div>}

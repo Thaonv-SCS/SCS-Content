@@ -6,7 +6,14 @@ import { revalidatePath } from 'next/cache';
 import {
   addGoldExampleByUrl,
   buildPastedOutput,
+  canGiaiLink,
+  capNhatSanPham,
+  chenVideo,
   createDraftProduct,
+  parseVideoLink,
+  timTrenWeb,
+  type KieuDayLai,
+  type SanPhamWeb,
   findBySkus,
   IMPORT_MAX_ROWS,
   parseVariants,
@@ -224,6 +231,7 @@ export async function saveOutputEdit(id: string, _prev: string | null, form: For
     slug: get('slug'),
     short_description_html: get('short_description_html'),
     description_html: get('description_html'),
+    image_alt: get('image_alt'),
     tags: get('tags')
       .split(',')
       .map((t) => t.trim())
@@ -242,8 +250,23 @@ export async function setCategories(id: string, ids: number[]) {
   revalidatePath(`/products/${id}`);
 }
 
-/** Tạo sản phẩm ở trạng thái NHÁP trên WooCommerce. Admin tự thêm ảnh, kiểm tra và bấm Đăng trên WordPress. */
-export async function pushDraft(id: string): Promise<string | null> {
+/** Sản phẩm này đã có trên web chưa (nháp app tạo trước đó, hoặc sản phẩm cũ trùng SKU). */
+export async function kiemTraTrenWeb(id: string): Promise<{ ok: true; web: SanPhamWeb | null } | { ok: false; error: string }> {
+  const supabase = await supabaseServer();
+  const { data: p } = await supabase.from('products').select('sku,woo_product_id').eq('id', id).single();
+  if (!p) return { ok: false, error: 'Không thấy sản phẩm.' };
+  try {
+    return { ok: true, web: await timTrenWeb(p.woo_product_id as number | null, p.sku as string | null) };
+  } catch (err) {
+    return { ok: false, error: (err as Error).message };
+  }
+}
+
+/**
+ * Đẩy lên WooCommerce. Chưa có trên web → tạo NHÁP mới. Đã có (cùng id app lưu hoặc trùng SKU) → cần chọn
+ * 'cap-nhat' (giữ ảnh trong mô tả trên web) hoặc 'thay-the' (thay toàn bộ mô tả). Không bao giờ đổi trạng thái đăng.
+ */
+export async function pushDraft(id: string, kieu?: KieuDayLai): Promise<string | null> {
   const supabase = await supabaseServer();
   const { data: p } = await supabase
     .from('products')
@@ -251,38 +274,78 @@ export async function pushDraft(id: string): Promise<string | null> {
     .eq('id', id)
     .single();
   if (!p?.output) return 'Chưa có bản viết.';
-  if (p.woo_product_id) return 'Sản phẩm này đã được tạo nháp trên web.';
   if (!p.category_ids.length) return 'Chọn ít nhất một danh mục trước.';
   const o = p.output as ProductOutput;
-  try {
-    const draft = await createDraftProduct({
-      name: p.name,
-      sku: p.sku,
-      price: p.price,
-      sale_price: p.sale_price,
-      slug: o.slug,
-      description_html: o.description_html,
-      short_description_html: o.short_description_html,
-      category_ids: p.category_ids,
-      tags: o.tags,
-      sizes: p.sizes,
-      soleplate: (p.spec as Record<string, string>).soleplate || undefined,
-      seo_title: o.seo_title,
-      meta_description: o.meta_description,
-      focus_keyphrase: o.focus_keyphrase,
-    });
+  // đọc riêng: chưa chạy migration 0024 thì coi như không có video, vẫn đẩy được
+  const { data: vd } = await supabase.from('products').select('video_links').eq('id', id).maybeSingle();
+  const videos = ((vd?.video_links as string[] | null) ?? []).filter((l) => parseVideoLink(l));
+  const input = {
+    name: p.name,
+    sku: p.sku,
+    price: p.price,
+    sale_price: p.sale_price,
+    slug: o.slug,
+    description_html: chenVideo(o.description_html, videos),
+    short_description_html: o.short_description_html,
+    category_ids: p.category_ids,
+    tags: o.tags,
+    sizes: p.sizes,
+    soleplate: (p.spec as Record<string, string>).soleplate || undefined,
+    seo_title: o.seo_title,
+    meta_description: o.meta_description,
+    focus_keyphrase: o.focus_keyphrase,
+  };
+  const xong = async (wooId: number, editUrl: string) => {
     await supabase
       .from('products')
-      .update({ woo_product_id: draft.id, woo_edit_url: draft.edit_url, pushed_at: new Date().toISOString() })
+      .update({ woo_product_id: wooId, woo_edit_url: editUrl, pushed_at: new Date().toISOString() })
       .eq('id', id);
     revalidatePath(`/products/${id}`);
     if (p.batch_id) revalidatePath(`/products/batch/${p.batch_id}`);
-    return draft.brand
-      ? null
-      : '⚠ Đã tạo nháp nhưng không nhận ra Hãng từ tên sản phẩm — chọn Hãng trên WordPress trước khi Đăng.';
+  };
+  try {
+    const web = await timTrenWeb(p.woo_product_id as number | null, p.sku as string | null);
+    if (!web) {
+      const draft = await createDraftProduct(input);
+      await xong(draft.id, draft.edit_url);
+      return draft.brand ? null : '⚠ Đã tạo nháp nhưng không nhận ra Hãng từ tên sản phẩm — chọn Hãng trên WordPress trước khi Đăng.';
+    }
+    // Đã có trên web: mô tả đang trống thì coi như thêm mới; còn lại phải chọn kiểu
+    const k: KieuDayLai | undefined = web.co_noi_dung ? kieu : 'thay-the';
+    if (!k) return `Mã ${p.sku ?? ''} đã có trên web: "${web.name}" — chọn Cập nhật hoặc Thay thế.`;
+    const r = await capNhatSanPham(web.id, input, k, videos.length > 0);
+    await xong(web.id, web.edit_url);
+    const giu = k === 'cap-nhat' && r.giu_anh ? ` · giữ ${r.giu_anh} ảnh/video có sẵn trong mô tả` : '';
+    return `✓ Đã ${k === 'cap-nhat' ? 'cập nhật' : 'thay thế'} nội dung "${web.name}" trên web (${web.status === 'publish' ? 'đang bán — slug giữ nguyên' : 'nháp'})${giu}${r.brand ? '' : ' · ⚠ không nhận ra Hãng'}`;
   } catch (err) {
     return (err as Error).message;
   }
+}
+
+/** Lưu link video (YouTube / TikTok, mỗi dòng một link). Link rút gọn TikTok được mở ra lấy link đầy đủ. */
+export async function luuVideo(id: string, _prev: string | null, form: FormData): Promise<string | null> {
+  const dong = String(form.get('video_links') ?? '')
+    .split(/\s+/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+  const ds: string[] = [];
+  const hong: string[] = [];
+  for (let l of dong) {
+    if (!/^https?:\/\//i.test(l)) l = `https://${l}`;
+    if (canGiaiLink(l)) {
+      try {
+        const r = await fetch(l, { redirect: 'follow', headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(15_000) });
+        l = r.url;
+      } catch {}
+    }
+    if (parseVideoLink(l)) ds.push(l.split('?')[0]!.includes('youtube.com/watch') ? l : l.split('?')[0]!);
+    else hong.push(l);
+  }
+  const supabase = await supabaseServer();
+  const { error } = await supabase.from('products').update({ video_links: ds }).eq('id', id);
+  if (error) return `Lỗi lưu: ${error.message}${/video_links/.test(error.message) ? ' (chưa chạy migration 0024)' : ''}`;
+  revalidatePath(`/products/${id}`);
+  return hong.length ? `⚠ Đã lưu ${ds.length} video · không nhận ra: ${hong.join(', ')}` : `✓ Đã lưu ${ds.length} video`;
 }
 
 export async function deleteProduct(id: string) {

@@ -3,8 +3,9 @@
 import { useActionState, useEffect, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import type { ProductOutput, ProductType, ResearchResult, SpecField } from '@app/products';
-import { applyFacts, deleteProduct, pushDraft, regenerate, research, saveOutputEdit, setCategories, updateSpec } from '../actions';
+import type { KieuDayLai, ProductOutput, ProductType, ResearchResult, SanPhamWeb, SpecField } from '@app/products';
+import { chenVideo, parseVideoLink } from '@app/products/src/video.ts';
+import { applyFacts, deleteProduct, kiemTraTrenWeb, luuVideo, pushDraft, regenerate, research, saveOutputEdit, setCategories, updateSpec } from '../actions';
 import { BasicFields, SpecInputs } from '../spec-fields';
 
 import type { CategoryOption } from "@/lib/categories";
@@ -31,6 +32,7 @@ export type ProductView = {
   job_error: string | null;
   woo_edit_url: string | null;
   pushed_at: string | null;
+  video_links: string[];
 };
 
 function Copy({ text, label = 'Copy' }: { text: string; label?: string }) {
@@ -107,6 +109,9 @@ export function Workspace({
     },
     null,
   );
+  const [videoMsg, doVideo, savingVideo] = useActionState(luuVideo.bind(null, p.id), null);
+  const [web, setWeb] = useState<SanPhamWeb | null>(null);
+  const [kieu, setKieu] = useState<KieuDayLai>('cap-nhat');
   const [editing, setEditing] = useState(false);
   const [pending, start] = useTransition();
   const [actionError, setActionError] = useState<string | null>(null);
@@ -136,7 +141,9 @@ export function Workspace({
       )}
       {p.job_status === 'failed' && <div className="card status-line warn">✗ Lỗi: {p.job_error}</div>}
       {actionError && (
-        <div className="card status-line warn">{actionError.startsWith('⚠') ? actionError : `✗ ${actionError}`}</div>
+        <div className={`card status-line ${actionError.startsWith('✓') ? 'on' : 'warn'}`}>
+          {actionError.startsWith('⚠') || actionError.startsWith('✓') ? actionError : `✗ ${actionError}`}
+        </div>
       )}
 
       <div className="workspace">
@@ -210,6 +217,7 @@ export function Workspace({
                   ['focus_keyphrase', 'Từ khóa chính (Yoast)', o.focus_keyphrase, 1],
                   ['slug', 'Đường dẫn (slug)', o.slug, 1],
                   ['tags', 'Tags (cách nhau bằng dấu phẩy)', o.tags.join(', '), 2],
+                  ['image_alt', 'Alt ảnh', o.image_alt, 1],
                   ['short_description_html', 'Mô tả ngắn (HTML)', o.short_description_html, 4],
                   ['description_html', 'Mô tả (HTML)', o.description_html, 18],
                 ] as const
@@ -246,7 +254,7 @@ export function Workspace({
                 <Preview html={o.short_description_html} />
               </Field>
               <Field label="Mô tả" value={o.description_html}>
-                <Preview html={o.description_html} />
+                <Preview html={chenVideo(o.description_html, p.video_links, true)} />
               </Field>
 
               {o.missing.length > 0 && (
@@ -272,10 +280,22 @@ export function Workspace({
                 <button className="ghost" onClick={() => setEditing(true)}>Sửa tay</button>
               </div>
               {!manual && (
-                <form action={doRegen} className="inline">
-                  <input name="instruction" placeholder='Yêu cầu viết lại, vd "ngắn hơn", "nhấn mạnh độ bám sân"' />
-                  <button type="submit" className="ghost" disabled={regenerating || busy}>Viết lại</button>
-                  {regenError && <span className="warn">{regenError}</span>}
+                <form action={doRegen} className="settings">
+                  <label>
+                    <strong>Yêu cầu viết lại</strong>
+                    <textarea
+                      name="instruction"
+                      rows={5}
+                      placeholder={`Mỗi dòng một yêu cầu, vd:
+- Ngắn hơn
+- Nhấn mạnh độ bám sân
+- Thêm đoạn so sánh với bản Elite`}
+                    />
+                  </label>
+                  <div className="inline">
+                    <button type="submit" className="ghost" disabled={regenerating || busy}>Viết lại</button>
+                    {regenError && <span className="warn">{regenError}</span>}
+                  </div>
                 </form>
               )}
             </div>
@@ -292,7 +312,6 @@ export function Workspace({
                       <input
                         type="checkbox"
                         checked={cats.includes(c.id)}
-                        disabled={!!p.woo_edit_url}
                         onChange={(e) => {
                           const next = e.target.checked ? [...cats, c.id] : cats.filter((x) => x !== c.id);
                           setCats(next);
@@ -305,23 +324,75 @@ export function Workspace({
                     </label>
                   ))}
                 </div>
-                {p.woo_edit_url ? (
+                <h3 style={{ margin: '8px 0 0', fontSize: 15 }}>Video trong mô tả</h3>
+                <form action={doVideo} className="settings">
+                  <label className="meta">
+                    Link YouTube / TikTok, mỗi dòng một link — chèn ngay dưới bảng thông số, căn giữa (xem ô xám ở phần Mô tả bên trên)
+                    <textarea name="video_links" rows={2} defaultValue={p.video_links.join('\n')} placeholder="https://www.youtube.com/watch?v=…&#10;https://www.tiktok.com/@soccerstore.vn/video/…" />
+                  </label>
+                  <div className="inline">
+                    <button type="submit" className="ghost" disabled={savingVideo}>Lưu video</button>
+                    {videoMsg && <span className={videoMsg.startsWith('✓') ? 'on' : 'warn'}>{videoMsg}</span>}
+                    {p.video_links.some((l) => !parseVideoLink(l)) && <span className="warn">Có link không nhận ra</span>}
+                  </div>
+                </form>
+
+                {p.woo_edit_url && (
                   <p className="on">
-                    ✓ Đã tạo bản nháp —{' '}
-                    <a href={p.woo_edit_url} target="_blank" rel="noreferrer">mở trên WordPress</a> để thêm ảnh, kiểm tra và bấm Đăng.
+                    ✓ Đã đẩy lên web{p.pushed_at ? ` lúc ${new Date(p.pushed_at).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', dateStyle: 'short', timeStyle: 'short' })}` : ''} —{' '}
+                    <a href={p.woo_edit_url} target="_blank" rel="noreferrer">mở trên WordPress</a>. Sửa nội dung ở app rồi đẩy lại được.
                   </p>
+                )}
+                {web ? (
+                  <div className="verify">
+                    <div>
+                      Đã có trên web:{' '}
+                      <a href={web.permalink} target="_blank" rel="noreferrer">{web.name}</a>{' '}
+                      <span className="meta">({web.status === 'publish' ? 'đang bán' : web.status === 'draft' ? 'nháp' : web.status} · {web.so_anh_mo_ta} ảnh trong mô tả)</span>
+                    </div>
+                    <label className="inline">
+                      <input type="radio" checked={kieu === 'cap-nhat'} onChange={() => setKieu('cap-nhat')} style={{ width: 'auto', margin: 0 }} />
+                      <span><strong>Cập nhật</strong> — thay chữ bằng bản trong app, <strong>giữ ảnh</strong> đang có trong mô tả trên web</span>
+                    </label>
+                    <label className="inline">
+                      <input type="radio" checked={kieu === 'thay-the'} onChange={() => setKieu('thay-the')} style={{ width: 'auto', margin: 0 }} />
+                      <span><strong>Thay thế</strong> — mô tả trên web thay toàn bộ bằng bản trong app (mất ảnh trong mô tả)</span>
+                    </label>
+                    <div className="meta">Không đổi: trạng thái {web.status === 'publish' ? '(vẫn đang bán)' : '(vẫn là nháp)'}, ảnh đại diện{web.status === 'publish' ? ', đường dẫn (slug)' : ''}.</div>
+                    <div className="inline">
+                      <button
+                        disabled={pending || busy || !cats.length}
+                        onClick={() => {
+                          if (!confirm(`${kieu === 'cap-nhat' ? 'CẬP NHẬT' : 'THAY THẾ'} nội dung "${web.name}" trên web?${web.status === 'publish' ? '\nSản phẩm đang bán — thay đổi hiện ngay cho khách.' : ''}`)) return;
+                          start(async () => {
+                            setActionError(await pushDraft(p.id, kieu));
+                            setWeb(null);
+                          });
+                        }}
+                      >
+                        {kieu === 'cap-nhat' ? 'Cập nhật lên web' : 'Thay thế trên web'}
+                      </button>
+                      <button type="button" className="ghost" onClick={() => setWeb(null)}>Hủy</button>
+                    </div>
+                  </div>
                 ) : (
                   <div className="inline">
                     <button
                       disabled={pending || busy || !cats.length}
-                      onClick={() => {
-                        if (confirm('Tạo sản phẩm NHÁP trên website? (Chưa đăng — mày vẫn phải vào WordPress thêm ảnh và bấm Đăng)'))
-                          start(async () => setActionError(await pushDraft(p.id)));
-                      }}
+                      onClick={() =>
+                        start(async () => {
+                          setActionError(null);
+                          const r = await kiemTraTrenWeb(p.id);
+                          if (!r.ok) return setActionError(r.error);
+                          if (r.web?.co_noi_dung) return setWeb(r.web); // đã có nội dung → hỏi Cập nhật / Thay thế
+                          if (!confirm(r.web ? `Đẩy nội dung vào "${r.web.name}" (đang trống) trên web?` : 'Tạo sản phẩm NHÁP trên website? (Chưa đăng — mày vẫn phải vào WordPress thêm ảnh và bấm Đăng)')) return;
+                          setActionError(await pushDraft(p.id));
+                        })
+                      }
                     >
-                      Tạo bản nháp trên WooCommerce
+                      {pending ? 'Đang kiểm tra…' : p.woo_edit_url ? 'Đẩy lại lên WooCommerce' : 'Tạo bản nháp trên WooCommerce'}
                     </button>
-                    <span className="meta">Điền sẵn: tên, SKU, giá (+ giá KM), size, loại đinh, hãng, mô tả, tags, danh mục, Yoast. Ảnh tải trên WordPress.</span>
+                    <span className="meta">Điền sẵn: tên, SKU, giá (+ giá KM), size, loại đinh, hãng, mô tả (+ video), tags, danh mục, Yoast. Đã có trên web thì được chọn Cập nhật / Thay thế.</span>
                   </div>
                 )}
               </div>

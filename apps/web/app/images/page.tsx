@@ -2,6 +2,7 @@ import { requireTeam } from '@/lib/auth';
 import { supabaseServer } from '@/lib/supabase';
 import { ThumbUploader } from './thumb-uploader';
 import { ImageUploader } from './uploader';
+import { VideoUploader } from './video-uploader';
 
 export default async function ImagesPage() {
   const me = await requireTeam();
@@ -31,7 +32,13 @@ export default async function ImagesPage() {
       </p>
       <ImageUploader />
 
-      <h2>Lịch sử up ảnh</h2>
+      <h2>Video trong mô tả (theo SKU)</h2>
+      <p className="muted">
+        Chèn video YouTube / TikTok hàng loạt vào mô tả sản phẩm — hiện ngay dưới bảng thông số, căn giữa.
+      </p>
+      <VideoUploader />
+
+      <h2>Lịch sử up ảnh / video</h2>
       <div className="card scroll">
         <table>
           <thead>
@@ -52,7 +59,9 @@ export default async function ImagesPage() {
                   <div className="meta">{h.sku}</div>
                 </td>
                 <td>
-                  {h.mode === 'thumb'
+                  {h.mode === 'video'
+                    ? `Chèn ${h.added} video${h.images_before ? ` · bỏ ${h.images_before} video cũ` : ''}`
+                    : h.mode === 'thumb'
                     ? h.images_before ? 'Thay ảnh đại diện' : 'Đặt ảnh đại diện'
                     : `${h.mode === 'replace' ? 'Thay' : 'Thêm'} ${h.added} ảnh mô tả · ${h.images_before} → ${h.images_after}`}
                 </td>

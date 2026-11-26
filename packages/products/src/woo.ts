@@ -349,24 +349,38 @@ export async function createDraftProduct(input: DraftInput): Promise<DraftResult
   }
 
   // Thuộc tính dùng chung trên web ("Chọn Size", "Loại Đinh") — gắn theo id để dùng đúng bộ lọc sẵn có
-  const attrs = await wc<{ id: number; name: string }[]>('GET', '/products/attributes');
-  const attrId = (name: string) => attrs.find((a) => a.name.toLowerCase() === name.toLowerCase())?.id;
-  const plates = soleplateOptions(input.soleplate);
-  const attributes = [
-    input.sizes.length && { ...(attrId('Chọn Size') ? { id: attrId('Chọn Size') } : { name: 'Chọn Size' }), options: input.sizes, visible: true },
-    plates.length && { ...(attrId('Loại Đinh') ? { id: attrId('Loại Đinh') } : { name: 'Loại Đinh' }), options: plates, visible: true },
-  ].filter(Boolean);
+  const attributes = await thuocTinh(input);
 
   const brand = await detectBrand(input.name);
 
   const created = await wc<{ id: number }>('POST', '/products', {
-    name: input.name,
+    ...(await truongNoiDung(input, attributes, brand)),
     status: 'draft', // KHÔNG BAO GIỜ đổi: admin tự kiểm tra và bấm Đăng trên WordPress
     type: 'simple',
     sku: input.sku ?? undefined,
-    regular_price: input.price ? String(input.price) : undefined,
-    sale_price: input.sale_price && input.price && input.sale_price < input.price ? String(input.sale_price) : undefined,
     slug: input.slug,
+  });
+  return { id: created.id, edit_url: `${WOO_URL}/wp-admin/post.php?post=${created.id}&action=edit`, brand: brand?.name ?? null };
+}
+
+/** Thuộc tính "Chọn Size" / "Loại Đinh" theo id có sẵn trên web. */
+export async function thuocTinh(input: Pick<DraftInput, 'sizes' | 'soleplate'>): Promise<{ id?: number; name?: string; options: string[]; visible: boolean }[]> {
+  const attrs = await wc<{ id: number; name: string }[]>('GET', '/products/attributes');
+  const attrId = (name: string) => attrs.find((a) => a.name.toLowerCase() === name.toLowerCase())?.id;
+  const plates = soleplateOptions(input.soleplate);
+  return [
+    input.sizes.length ? { ...(attrId('Chọn Size') ? { id: attrId('Chọn Size') } : { name: 'Chọn Size' }), options: input.sizes, visible: true } : null,
+    plates.length ? { ...(attrId('Loại Đinh') ? { id: attrId('Loại Đinh') } : { name: 'Loại Đinh' }), options: plates, visible: true } : null,
+  ].filter((x): x is NonNullable<typeof x> => !!x);
+}
+
+/** Các ô nội dung chung cho tạo mới lẫn cập nhật (không gồm trạng thái, SKU, slug, ảnh). */
+export async function truongNoiDung(input: DraftInput, attributes: unknown[], brand: Brand | null) {
+  return {
+    name: input.name,
+    regular_price: input.price ? String(input.price) : undefined,
+    // có giá gốc mà không có giá KM hợp lệ → xóa giá KM cũ trên web (cập nhật)
+    sale_price: input.price ? (input.sale_price && input.sale_price < input.price ? String(input.sale_price) : '') : undefined,
     description: input.description_html,
     short_description: input.short_description_html,
     categories: input.category_ids.map((id) => ({ id })),
@@ -378,6 +392,5 @@ export async function createDraftProduct(input: DraftInput): Promise<DraftResult
       { key: '_yoast_wpseo_metadesc', value: input.meta_description },
       { key: '_yoast_wpseo_focuskw', value: input.focus_keyphrase },
     ].filter((m) => m.value?.trim()), // ô trống (bài tự dán chưa điền) → để Yoast dùng mặc định
-  });
-  return { id: created.id, edit_url: `${WOO_URL}/wp-admin/post.php?post=${created.id}&action=edit`, brand: brand?.name ?? null };
+  };
 }

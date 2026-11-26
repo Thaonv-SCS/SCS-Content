@@ -113,7 +113,7 @@ export function ImageUploader() {
                 const fd = new FormData();
                 fd.append('file', await shrink(f), `${p.sku}-${i + k + 1}.jpg`);
                 fd.append('filename', `${p.sku}-${i + k + 1}.jpg`);
-                fd.append('alt', p.name);
+                fd.append('alt', p.alt);
                 fd.append('productId', String(p.id));
                 const r = await uploadOne(fd);
                 if (r.ok) results[i + k] = r.data;
@@ -131,7 +131,7 @@ export function ImageUploader() {
           set({ status: 'error', done: uploaded.length, message: `${failed} — chưa chèn vào mô tả, up lại mã này.` });
           continue;
         }
-        const att = await attachToProduct({ id: p.id, sku: p.sku, name: p.name }, uploaded, mode);
+        const att = await attachToProduct({ id: p.id, sku: p.sku, name: p.name, alt: p.alt }, uploaded, mode);
         set(
           att.ok
             ? { status: 'done', done: uploaded.length, message: `mô tả: ${att.data.before} → ${att.data.after} ảnh` }
@@ -217,7 +217,7 @@ export function ImageUploader() {
                           <>
                             <a href={p.permalink} target="_blank" rel="noreferrer">{p.name}</a>
                             <div className="meta">
-                              {p.sku} · đang có {p.images} ảnh trong mô tả
+                              {p.sku} · đang có {p.images} ảnh trong mô tả · alt: {p.altApp ? <span className="on">theo app</span> : 'tên sản phẩm'}
                               {p.status !== 'publish' && ` · ${p.status === 'draft' ? 'bản nháp' : p.status}`}
                             </div>
                           </>

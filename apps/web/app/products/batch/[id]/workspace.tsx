@@ -100,7 +100,7 @@ export function BatchWorkspace({
         log.push(`⏳ ${v.name}…`);
         setPushLog([...log]);
         const err = await pushDraft(v.id);
-        log[log.length - 1] = err ? `${err.startsWith('⚠') ? '' : '✗ '}${v.name}: ${err}` : `✓ ${v.name}`;
+        log[log.length - 1] = err ? `${err.startsWith('⚠') || err.startsWith('✓') ? '' : '✗ '}${v.name}: ${err}` : `✓ ${v.name}`;
         setPushLog([...log]);
       }
       router.refresh();

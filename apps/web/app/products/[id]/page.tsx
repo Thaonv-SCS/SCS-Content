@@ -9,7 +9,7 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
   await requireTeam();
   const { id } = await params;
   const supabase = await supabaseServer();
-  const [{ data: p }, categories] = await Promise.all([
+  const [{ data: p }, categories, { data: vd }] = await Promise.all([
     supabase
       .from('products')
       .select(
@@ -18,11 +18,13 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
       .eq('id', id)
       .maybeSingle(),
     loadCategoryOptions(supabase),
+    // đọc riêng để trang vẫn mở được khi chưa chạy migration 0024
+    supabase.from('products').select('video_links').eq('id', id).maybeSingle(),
   ]);
   if (!p) notFound();
 
   const batch = (p as unknown as { product_batches?: { base_name: string } | null }).product_batches;
-  const product = { ...p, batch_name: batch?.base_name ?? null } as unknown as ProductView & {
+  const product = { ...p, video_links: (vd?.video_links as string[] | null) ?? [], batch_name: batch?.base_name ?? null } as unknown as ProductView & {
     output: ProductOutput | null;
     research: ResearchResult | null;
   };

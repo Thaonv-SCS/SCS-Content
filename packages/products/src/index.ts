@@ -39,3 +39,5 @@ export {
   type ThumbInfo,
   type UploadedImage,
 } from './images.ts';
+export { capNhatSanPham, ganVideo, khoiAnhVideo, timTrenWeb, videoCuaSanPham, type KieuDayLai, type SanPhamWeb } from './update.ts';
+export { boMoiVideo, boVideo, canGiaiLink, chenVideo, datVideo, embedHtml, parseVideoLink, videoTrongMoTa, type VideoLink } from './video.ts';

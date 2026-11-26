@@ -101,7 +101,7 @@ export async function runBatchJob(db: SupabaseClient, batchId: string, job: Prod
         notes: batch.notes,
         output: null,
         category_ids: [],
-      });
+      }, { batch_id: batchId });
       await setBatch({ research, job_status: 'done' });
       return false;
     }

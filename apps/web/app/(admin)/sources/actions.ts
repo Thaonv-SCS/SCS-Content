@@ -1,5 +1,7 @@
 'use server';
 
+import { kiemQuyen } from '@/lib/auth';
+
 import { revalidatePath } from 'next/cache';
 import { detectSource, previewSource, type DetectResult, type SourcePreview } from '@app/connectors';
 import type { CategoryHint, SourceKind } from '@app/core';
@@ -11,6 +13,8 @@ const EDITABLE_KINDS: SourceKind[] = ['rss', 'sitemap'];
 export type DetectState = (DetectResult & { input: string }) | null;
 
 export async function detect(_prev: DetectState, form: FormData): Promise<DetectState> {
+  const loiQuyen = await kiemQuyen('ban-tin-ql');
+  if (loiQuyen) return { input: '', ok: false, message: loiQuyen };
   const input = String(form.get('link') ?? '').trim();
   if (!input) return { input, ok: false, message: 'Dán link trang web vào đã.' };
   return { input, ...(await detectSource(input)) };
@@ -66,6 +70,8 @@ const slugify = (s: string) =>
     .slice(0, 40) || 'nguon';
 
 export async function createSource(_prev: string | null, form: FormData): Promise<string | null> {
+  const loiQuyen = await kiemQuyen('ban-tin-ql');
+  if (loiQuyen) return loiQuyen;
   const fields = readFields(form);
   if (typeof fields === 'string') return fields;
 
@@ -86,6 +92,8 @@ export async function createSource(_prev: string | null, form: FormData): Promis
 }
 
 export async function updateSource(id: string, _prev: string | null, form: FormData): Promise<string | null> {
+  const loiQuyen = await kiemQuyen('ban-tin-ql');
+  if (loiQuyen) return loiQuyen;
   const supabase = await supabaseServer();
   const { data: current } = await supabase.from('sources').select('kind').eq('id', id).single();
 
@@ -114,12 +122,15 @@ export async function updateSource(id: string, _prev: string | null, form: FormD
 
 /** Xóa nguồn. Bài đã lấy từ nguồn này vẫn giữ (raw_items.source_id → null). */
 export async function deleteSource(id: string) {
+  if (await kiemQuyen('ban-tin-ql')) return;
   const supabase = await supabaseServer();
   await supabase.from('sources').delete().eq('id', id);
   revalidatePath('/sources');
 }
 
 export async function testSource(id: string): Promise<{ preview?: SourcePreview; error?: string }> {
+  const loiQuyen = await kiemQuyen('ban-tin-ql');
+  if (loiQuyen) return { error: loiQuyen };
   const supabase = await supabaseServer();
   const { data: s } = await supabase.from('sources').select('kind,url,config').eq('id', id).single();
   if (!s) return { error: 'Không tìm thấy nguồn.' };
@@ -131,6 +142,7 @@ export async function testSource(id: string): Promise<{ preview?: SourcePreview;
 }
 
 export async function setEnabled(id: string, enabled: boolean) {
+  if (await kiemQuyen('ban-tin-ql')) return;
   const supabase = await supabaseServer();
   await supabase.from('sources').update({ enabled }).eq('id', id);
   revalidatePath('/sources');

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import type { Khuon } from '@app/du-an';
-import { requireDuAn } from '@/lib/auth';
+import { requireDuAn, suaKho } from '@/lib/auth';
 import { formatDateTime } from '@/lib/format';
 import { supabaseServer } from '@/lib/supabase';
 import { ThemKhuonForm } from '../../forms';
@@ -19,7 +19,7 @@ export default async function KhuonPage() {
         Mỗi khuôn là "công thức" một loại video: mục tiêu, các nhịp, độ dài, kiểu hook. AI chọn khuôn khi phát triển ý tưởng và viết kịch bản theo nhịp của khuôn.
         Bản đầu là bản nháp chung — thêm video mẫu của shop để tao phân tích và chỉnh theo đúng gu.
       </p>
-      {me.role === 'admin' && <ThemKhuonForm ds={ds.map((k) => ({ ma: k.ma, ten: k.ten }))} />}
+      {suaKho(me) && <ThemKhuonForm ds={ds.map((k) => ({ ma: k.ma, ten: k.ten }))} />}
       <div className="du-an-tiles">
         {ds.map((k) => (
           <Link key={k.ma} href={`/du-an/kho/khuon/${k.ma}`} className="card du-an-tile">

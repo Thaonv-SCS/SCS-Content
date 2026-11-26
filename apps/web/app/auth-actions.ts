@@ -1,6 +1,7 @@
 'use server';
 
 import { redirect } from 'next/navigation';
+import { currentUser, trangDau } from '@/lib/auth';
 import { supabaseServer } from '@/lib/supabase';
 
 export async function signIn(_prev: string | null, form: FormData): Promise<string | null> {
@@ -10,9 +11,8 @@ export async function signIn(_prev: string | null, form: FormData): Promise<stri
     password: String(form.get('password') ?? ''),
   });
   if (error) return 'Sai email hoặc mật khẩu.';
-  // vào thẳng trang của mình: admin → Bản tin, nhân viên post → Sản phẩm, tài khoản video → Video
-  const { data: p } = await supabase.from('profiles').select('role').eq('user_id', data.user.id).maybeSingle();
-  redirect(p?.role === 'video' ? '/video' : p?.role === 'staff' ? '/products' : '/');
+  // vào thẳng trang đầu tiên mình có quyền
+  redirect(trangDau(await currentUser()));
 }
 
 export async function signOut() {

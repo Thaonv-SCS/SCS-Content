@@ -1,4 +1,5 @@
 import { CATEGORY_LABEL, type CategoryHint } from '@app/core';
+import { requireQuyen } from '@/lib/auth';
 import { supabaseServer } from '@/lib/supabase';
 import { AddSourceForm, SourceRowView, type Option, type SourceRow } from './source-forms';
 
@@ -9,6 +10,7 @@ const CATEGORY_OPTIONS: Option[] = (['mixed', ...Object.keys(CATEGORY_LABEL), 'm
 }));
 
 export default async function SourcesPage() {
+  await requireQuyen('ban-tin-ql');
   const supabase = await supabaseServer();
   const { data, error } = await supabase
     .from('sources')

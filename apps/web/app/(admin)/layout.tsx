@@ -1,7 +1,4 @@
-import { requireAdmin } from '@/lib/auth';
-
-/** Bản tin, bài thô, nguồn, kho caption, cài đặt: chỉ admin. Dữ liệu cũng được chặn ở database (RLS). */
-export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  await requireAdmin();
+/** Bản tin, kho caption, bài thô, nguồn, cài đặt: từng trang tự kiểm quyền (Cài đặt → Phân quyền). Database cũng chặn (RLS). */
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return children;
 }

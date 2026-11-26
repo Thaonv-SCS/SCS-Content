@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { costOf, type TokenUsage } from '@app/core';
+import { costOf, moHinhCho, type CauHinhMoHinh, type TokenUsage } from '@app/core';
 
 export const anthropic = new Anthropic();
 
@@ -33,6 +33,14 @@ export class Budget {
       .gte('created_at', new Date(`${today}T00:00:00+07:00`).toISOString());
     if (error) throw error;
     this.spent = (data ?? []).reduce((s, r: { cost_usd: number | string }) => s + Number(r.cost_usd), 0);
+  }
+
+  private moHinhCaiDat: Promise<unknown> | null = null;
+
+  /** Mô hình + mức suy nghĩ cho một việc theo Cài đặt → Mô hình AI (đọc settings 1 lần mỗi lần chạy). */
+  async moHinh(ma: string): Promise<CauHinhMoHinh> {
+    this.moHinhCaiDat ??= Promise.resolve(this.db.from('settings').select('value').eq('key', 'mo_hinh_ai').maybeSingle()).then((r) => r.data?.value ?? null);
+    return moHinhCho(ma, await this.moHinhCaiDat);
   }
 
   get spentToday() {

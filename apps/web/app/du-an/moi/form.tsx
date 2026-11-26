@@ -1,10 +1,11 @@
 'use client';
 
 import { useActionState, useState } from 'react';
+import { DS_MO_HINH, DS_SUY_NGHI, VIEC_AI, type CauHinhMoHinh } from '@app/core/src/mo-hinh.ts';
 import { MUC_TIEU, NEN_TANG } from '@app/du-an/src/types.ts';
 import { taoDuAn } from '../actions';
 
-export function TaoDuAnForm({ khuon }: { khuon: { ma: string; ten: string }[] }) {
+export function TaoDuAnForm({ khuon, macDinh }: { khuon: { ma: string; ten: string }[]; macDinh: Record<string, CauHinhMoHinh> }) {
   const [error, action, pending] = useActionState(taoDuAn, null);
   const [cheDo, setCheDo] = useState<'duyet' | 'nhanh'>('duyet');
 
@@ -71,9 +72,40 @@ export function TaoDuAnForm({ khuon }: { khuon: { ma: string; ten: string }[] })
         </label>
       </div>
 
+      <details>
+        <summary>
+          <strong>Mô hình AI từng bước</strong> <span className="meta">— mặc định theo Cài đặt → Mô hình AI; đổi ở đây chỉ áp cho dự án này</span>
+        </summary>
+        <div className="scroll">
+          <table>
+            <thead><tr><th>Bước</th><th>Mô hình</th><th>Mức suy nghĩ</th></tr></thead>
+            <tbody>
+              {Object.entries(macDinh).map(([b, c]) => (
+                <tr key={b}>
+                  <td>
+                    {VIEC_AI.find((v) => v.ma === `du-an:${b}`)?.ten ?? b}
+                    <input type="hidden" name={`macdinh_${b}`} value={`${c.model}|${c.effort}`} />
+                  </td>
+                  <td>
+                    <select name={`model_${b}`} defaultValue={c.model}>
+                      {DS_MO_HINH.map((m) => <option key={m.ma} value={m.ma}>{m.ten}</option>)}
+                    </select>
+                  </td>
+                  <td>
+                    <select name={`effort_${b}`} defaultValue={c.effort}>
+                      {DS_SUY_NGHI.map((s) => <option key={s.ma} value={s.ma}>{s.ten}</option>)}
+                    </select>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </details>
+
       <div className="inline">
         <button type="submit" disabled={pending}>{pending ? 'Đang tạo…' : cheDo === 'nhanh' ? '⚡ Tạo & làm nhanh' : '✨ Tạo & phát triển ý tưởng'}</button>
-        <span className="meta">Mỗi bước khoảng $0,2–0,4 tiền AI</span>
+        <span className="meta">Mỗi bước khoảng $0,1–0,4 tiền AI tùy mô hình</span>
         {error && <span className="warn">{error}</span>}
       </div>
     </form>

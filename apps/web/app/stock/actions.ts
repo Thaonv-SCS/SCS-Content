@@ -12,15 +12,14 @@ import {
   type StockUpdate,
   type Visibility,
 } from '@app/products';
-import { currentUser } from '@/lib/auth';
+import { kiemQuyen } from '@/lib/auth';
 import { supabaseServer } from '@/lib/supabase';
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 type Page = { items: StockItem[]; totalPages: number; total: number };
 
 async function team(): Promise<string | null> {
-  const me = await currentUser();
-  return me && (me.role === 'admin' || me.role === 'staff') ? null : 'Tài khoản chưa được cấp quyền.';
+  return kiemQuyen('cap-nhat');
 }
 
 const fail = (err: unknown): { ok: false; error: string } => ({ ok: false, error: (err as Error).message });

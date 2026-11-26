@@ -1,5 +1,5 @@
 /** $ / 1 triệu token (input, output). Cache write ×1.25, cache read ×0.1 giá input. */
-const PRICES: Record<string, { in: number; out: number }> = {
+export const PRICES: Record<string, { in: number; out: number }> = {
   'claude-haiku-5-5': { in: 0.1, out: 0.5 },
   'claude-sonnet-5-5': { in: 2, out: 10 },
   'claude-opus-5-5': { in: 4, out: 20 },

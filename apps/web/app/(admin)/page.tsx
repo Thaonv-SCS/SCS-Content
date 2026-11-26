@@ -1,10 +1,12 @@
 import { CATEGORY_LABEL, EXTRA_SLOTS, MAIN_SLOTS, type Category } from '@app/core';
+import { requireQuyen } from '@/lib/auth';
 import { supabaseServer } from '@/lib/supabase';
 import { SuggestionCard, type Suggestion } from './suggestion-card';
 
 type Digest = { id: string; date: string; status: string; stats: { cost_today_usd?: number; failed?: number } | null };
 
 export default async function DigestPage() {
+  await requireQuyen('ban-tin');
   const supabase = await supabaseServer();
   const { data: digest } = await supabase
     .from('digests')

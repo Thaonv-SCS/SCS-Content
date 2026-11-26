@@ -3,7 +3,7 @@ import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
-import { costOf, WEB_SEARCH_COST_USD, type TokenUsage } from '@app/core';
+import { costOf, moHinhCho, WEB_SEARCH_COST_USD, type CauHinhMoHinh, type TokenUsage } from '@app/core';
 import { categoryPath, exampleToText, renderParagraphs, renderSpecTable, slugify, type LinkTarget } from './html.ts';
 import { SPEC_FIELDS, type ProductOutput, type ProductType, type ResearchFact, type ResearchResult } from './types.ts';
 import { fetchBrands, matchBrand, type Brand, type WooCategory } from './woo.ts';
@@ -25,7 +25,6 @@ export function surfaceCategories(product: ProductRow, categories: Map<number, W
   const slugs = { TF: ['giay-co-nhan-tao'], AG: ['giay-co-nhan-tao'], FG: ['giay-co-tu-nhien'], SG: ['giay-co-tu-nhien'], MG: ['giay-co-nhan-tao', 'giay-co-tu-nhien'] }[plate] ?? [];
   return [...categories.values()].filter((c) => slugs.includes(c.slug));
 }
-export const WRITE_MODEL = process.env.WRITE_MODEL || 'claude-opus-5-5';
 const PARSE_MODEL = process.env.CLASSIFY_MODEL || 'claude-haiku-5-5';
 const MAX_LINKS = 4;
 
@@ -56,10 +55,20 @@ export async function assertBudget(db: SupabaseClient) {
   }
 }
 
-export async function recordCall(db: SupabaseClient, purpose: string, model: string, usage: TokenUsage, searches = 0) {
+/** Chi phí này của sản phẩm / lô nào (để hiện cột Chi phí AI ở danh sách sản phẩm). */
+export type GanChiPhi = { product_id?: string; batch_id?: string };
+
+/** Mô hình + mức suy nghĩ cho một việc, theo Cài đặt → Mô hình AI (chưa chạy migration 0026 thì dùng mặc định). */
+export async function layMoHinh(db: SupabaseClient, ma: string): Promise<CauHinhMoHinh> {
+  const { data, error } = await db.rpc('mo_hinh_ai');
+  return moHinhCho(ma, error ? null : data);
+}
+
+export async function recordCall(db: SupabaseClient, purpose: string, model: string, usage: TokenUsage, searches = 0, gan: GanChiPhi = {}) {
   await db.from('llm_calls').insert({
     purpose,
     model,
+    ...gan,
     tokens_in: usage.input_tokens + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0),
     tokens_out: usage.output_tokens,
     cost_usd: costOf(model, usage) + searches * WEB_SEARCH_COST_USD,
@@ -220,11 +229,12 @@ export async function loadStyleNotes(db: SupabaseClient): Promise<string> {
 export async function generateProduct(db: SupabaseClient, product: ProductRow, instruction?: string): Promise<ProductOutput> {
   await assertBudget(db);
 
-  const [{ data: cats }, examples, siblings, styleNotes] = await Promise.all([
+  const [{ data: cats }, examples, siblings, styleNotes, mh] = await Promise.all([
     db.from('woo_categories').select('id,name,slug,parent,link,count'),
     loadExamples(db),
     loadSiblings(db, product),
     loadStyleNotes(db),
+    layMoHinh(db, 'product-write'),
   ]);
   const categories = new Map((cats as WooCategory[] | null ?? []).map((c) => [c.id, c]));
   if (!categories.size) throw new Error('Chưa có danh mục từ website — admin bấm "Đồng bộ dữ liệu website" trước.');
@@ -265,7 +275,7 @@ export async function generateProduct(db: SupabaseClient, product: ProductRow, i
       : '');
 
   const res = await anthropic.beta.messages.parse({
-    model: WRITE_MODEL,
+    model: mh.model,
     max_tokens: 16000,
     betas: ['server-side-fallback-2026-07-01'],
     fallbacks: 'default',
@@ -281,10 +291,10 @@ export async function generateProduct(db: SupabaseClient, product: ProductRow, i
           ]
         : []),
     ],
-    output_config: { format: betaZodOutputFormat(OutputSchema), effort: 'medium' },
+    output_config: { format: betaZodOutputFormat(OutputSchema), effort: mh.effort },
     messages: [{ role: 'user', content: body }],
   });
-  await recordCall(db, 'product-write', res.model, res.usage);
+  await recordCall(db, 'product-write', res.model, res.usage, 0, { product_id: product.id });
   if (res.stop_reason === 'refusal') throw new Error('AI từ chối viết nội dung này.');
   const o = res.parsed_output;
   if (!o) throw new Error('AI trả về sai định dạng — thử lại.');
@@ -333,9 +343,10 @@ const FactsSchema = z.object({
   facts: z.array(z.object({ field: z.string(), value: z.string(), source_url: z.string(), source_title: z.string() })),
 });
 
-export async function researchProduct(db: SupabaseClient, product: ProductRow): Promise<ResearchResult> {
+export async function researchProduct(db: SupabaseClient, product: ProductRow, gan: GanChiPhi = { product_id: product.id }): Promise<ResearchResult> {
   await assertBudget(db);
   const fields = SPEC_FIELDS[product.type];
+  const mh = await layMoHinh(db, 'product-research');
 
   // Bước 1: AI tìm trên web, ghi lại thông tin kèm nguồn
   const messages: Anthropic.Beta.BetaMessageParam[] = [
@@ -352,23 +363,23 @@ export async function researchProduct(db: SupabaseClient, product: ProductRow): 
   let searches = 0;
   for (let turn = 0; turn < 3; turn++) {
     const res = await anthropic.beta.messages.create({
-      model: WRITE_MODEL,
+      model: mh.model,
       max_tokens: 16000,
       betas: ['server-side-fallback-2026-07-01'],
       fallbacks: 'default',
       // 3 lượt tìm là đủ cho thông số một sản phẩm; mỗi lượt kéo theo nhiều chữ AI phải đọc (chi phí chính)
       tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 3 }],
-      output_config: { effort: 'low' },
+      output_config: { effort: mh.effort },
       messages,
     });
     searches += res.usage.server_tool_use?.web_search_requests ?? 0;
-    await recordCall(db, 'product-research', res.model, res.usage);
+    await recordCall(db, 'product-research', res.model, res.usage, 0, gan);
     if (res.stop_reason === 'refusal') throw new Error('AI từ chối tìm kiếm.');
     text += res.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('');
     if (res.stop_reason !== 'pause_turn') break;
     messages.push({ role: 'assistant', content: res.content });
   }
-  if (searches) await recordCall(db, 'product-research-search', 'web_search', { input_tokens: 0, output_tokens: 0 }, searches);
+  if (searches) await recordCall(db, 'product-research-search', 'web_search', { input_tokens: 0, output_tokens: 0 }, searches, gan);
 
   // Bước 2: model rẻ tách thành từng dòng thông tin có nguồn, gắn vào ô phiếu tương ứng
   const parsed = await anthropic.messages.parse({
@@ -384,7 +395,7 @@ export async function researchProduct(db: SupabaseClient, product: ProductRow): 
       },
     ],
   });
-  await recordCall(db, 'product-research-parse', parsed.model, parsed.usage);
+  await recordCall(db, 'product-research-parse', parsed.model, parsed.usage, 0, gan);
 
   const facts: ResearchFact[] = (parsed.parsed_output?.facts ?? []).filter((f) => /^https?:\/\//.test(f.source_url));
   return { facts, at: new Date().toISOString() };

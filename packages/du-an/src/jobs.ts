@@ -35,6 +35,9 @@ async function chayDuAn(db: SupabaseClient, job: Extract<DuAnJob, { kind: 'buoc'
   if (error || !data) return;
   if (data.trang_thai === 'huy') return;
   const d = data as DuAnRow & { trang_thai: string };
+  // đọc riêng: chưa chạy migration 0026 thì vẫn chạy được (theo Cài đặt / mặc định)
+  const { data: mh } = await db.from('du_an').select('mo_hinh').eq('id', job.id).maybeSingle();
+  d.mo_hinh = (mh?.mo_hinh as Record<string, unknown> | undefined) ?? {};
   const trangThaiTruoc = d.trang_thai;
 
   try {

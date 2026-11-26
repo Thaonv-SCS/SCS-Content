@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { STYLE_GUIDE, type StyleNotes } from '@app/core';
-import { anthropic, MODELS, type Budget } from './client.ts';
+import { anthropic, type Budget } from './client.ts';
 import type { CaptionRow } from './captions.ts';
 
 const SYSTEM = `Mày là biên tập viên trưởng của fanpage Soccerstore.vn (giày & phụ kiện bóng đá).
@@ -46,13 +46,14 @@ export async function generateStyleNotes(db: SupabaseClient, budget: Budget, lib
       .join('\n') +
     `\n\nCác lần admin sửa caption AI (${pairs.length}):\n${pairs.join('\n\n') || '(chưa có)'}`;
 
+  const mh = await budget.moHinh('style-notes');
   const res = await anthropic.beta.messages.create({
-    model: MODELS.write,
+    model: mh.model,
     max_tokens: 16000,
     betas: ['server-side-fallback-2026-07-01'],
     fallbacks: 'default',
     system: SYSTEM,
-    output_config: { effort: 'medium' },
+    output_config: { effort: mh.effort },
     messages: [{ role: 'user', content: body }],
   });
   await budget.record('style-notes', res.model, res.usage);

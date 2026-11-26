@@ -21,13 +21,14 @@ import {
   type Shotlist,
   type VideoMau,
 } from '@app/du-an';
-import { currentUser } from '@/lib/auth';
+import { DS_MO_HINH, DS_SUY_NGHI, VIEC_DU_AN, type CauHinhMoHinh, type MucSuyNghi } from '@app/core';
+import { currentUser, kiemAdmin, suaKho } from '@/lib/auth';
 import { supabaseServer } from '@/lib/supabase';
 
-/** Kho tri thức: chỉ admin sửa (database cũng chặn bằng RLS). */
+/** Kho tri thức: admin hoặc người được tick "Sửa kho tri thức" (database cũng chặn bằng RLS). */
 async function chiAdmin(): Promise<string | null> {
   const me = await currentUser();
-  return me?.role === 'admin' ? null : 'Chỉ admin được sửa kho tri thức.';
+  return suaKho(me) ? null : 'Tài khoản này chưa được cấp quyền sửa kho tri thức.';
 }
 
 /**
@@ -253,7 +254,7 @@ export async function xoaVideoMau(ma: string, link: string): Promise<void> {
 // ───────────── Cài đặt ─────────────
 
 export async function luuTran(_prev: string | null, form: FormData): Promise<string | null> {
-  const loi = await chiAdmin();
+  const loi = await kiemAdmin();
   if (loi) return loi;
   const tran = Number(String(form.get('tran') ?? '').replace(',', '.'));
   if (!(tran >= 0 && tran <= 50)) return 'Trần từ 0 đến 50 $/ngày.';
@@ -310,10 +311,18 @@ export async function taoDuAn(_prev: string | null, form: FormData): Promise<str
     ghi_chu: s('ghi_chu'),
   };
   const che_do = s('che_do') === 'nhanh' ? 'nhanh' : 'duyet';
+  // Chỉ lưu bước chọn KHÁC Cài đặt — bước để nguyên thì đi theo Cài đặt (đổi Cài đặt sau vẫn áp dụng)
+  const mo_hinh: Record<string, CauHinhMoHinh> = {};
+  for (const b of VIEC_DU_AN) {
+    const model = s(`model_${b}`);
+    const effort = s(`effort_${b}`) as MucSuyNghi;
+    if (!DS_MO_HINH.some((m) => m.ma === model) || !DS_SUY_NGHI.some((x) => x.ma === effort)) continue;
+    if (`${model}|${effort}` !== s(`macdinh_${b}`)) mo_hinh[b] = { model, effort };
+  }
   // Tự sinh id, không đọc lại sau khi thêm (tránh kiểu lỗi quyền xem dòng vừa thêm từng gặp ở Video editor)
   const id = crypto.randomUUID();
   const supabase = await supabaseServer();
-  const { error } = await supabase.from('du_an').insert({ id, ten, brief, che_do });
+  const { error } = await supabase.from('du_an').insert({ id, ten, brief, che_do, ...(Object.keys(mo_hinh).length ? { mo_hinh } : {}) });
   if (error) return `Lỗi tạo dự án: ${error.message}`;
   const err = await chayBuoc(id, { kind: 'buoc', id, buoc: 'y-tuong' }, 'AI đang làm: Phát triển ý tưởng…');
   if (err) return err;

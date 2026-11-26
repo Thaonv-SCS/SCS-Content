@@ -32,7 +32,7 @@ import {
   type ResearchResult,
 } from '@app/products';
 import { supabaseServer } from '@/lib/supabase';
-import { currentUser } from '@/lib/auth';
+import { co, currentUser, kiemQuyen } from '@/lib/auth';
 
 /**
  * Giao việc cho hàm chạy nền (viết mất 30–60 giây / sản phẩm, quá giới hạn một yêu cầu thường).
@@ -121,6 +121,8 @@ function readBasics(form: FormData) {
 // ───────────── Một sản phẩm ─────────────
 
 export async function createProduct(_prev: string | null, form: FormData): Promise<string | null> {
+  const loiQuyen = await kiemQuyen('san-pham');
+  if (loiQuyen) return loiQuyen;
   const type = String(form.get('type') ?? 'boots') as ProductType;
   if (!SPEC_FIELDS[type]) return 'Loại sản phẩm không hợp lệ.';
   const basics = readBasics(form);
@@ -159,6 +161,8 @@ export async function createProduct(_prev: string | null, form: FormData): Promi
 
 /** Lưu phiếu; nếu bấm "Lưu & viết lại" thì viết lại từ phiếu mới. */
 export async function updateSpec(id: string, _prev: string | null, form: FormData): Promise<string | null> {
+  const loiQuyen = await kiemQuyen('san-pham');
+  if (loiQuyen) return loiQuyen;
   const supabase = await supabaseServer();
   const { data: p } = await supabase.from('products').select('type,output').eq('id', id).single();
   if (!p) return 'Không tìm thấy sản phẩm.';
@@ -176,6 +180,8 @@ export async function updateSpec(id: string, _prev: string | null, form: FormDat
 }
 
 export async function regenerate(id: string, _prev: string | null, form: FormData): Promise<string | null> {
+  const loiQuyen = await kiemQuyen('san-pham');
+  if (loiQuyen) return loiQuyen;
   const supabase = await supabaseServer();
   const { data: p } = await supabase.from('products').select('output').eq('id', id).single();
   if ((p?.output as ProductOutput | null)?.manual) return 'Bài này là nội dung tự dán — sửa bằng nút Sửa tay.';
@@ -186,6 +192,8 @@ export async function regenerate(id: string, _prev: string | null, form: FormDat
 }
 
 export async function research(id: string): Promise<string | null> {
+  const loiQuyen = await kiemQuyen('san-pham');
+  if (loiQuyen) return loiQuyen;
   const err = await startProductJob(id, 'research');
   revalidatePath(`/products/${id}`);
   return err;
@@ -206,6 +214,8 @@ function mergeFacts(type: ProductType, spec: Record<string, string>, notes: stri
 }
 
 export async function applyFacts(id: string, _prev: string | null, form: FormData): Promise<string | null> {
+  const loiQuyen = await kiemQuyen('san-pham');
+  if (loiQuyen) return loiQuyen;
   const supabase = await supabaseServer();
   const { data: p } = await supabase.from('products').select('type,spec,notes,research').eq('id', id).single();
   if (!p?.research) return 'Chưa có kết quả tìm kiếm.';
@@ -219,6 +229,8 @@ export async function applyFacts(id: string, _prev: string | null, form: FormDat
 
 /** Lưu bản người sửa; giữ lịch sử để học văn phong. */
 export async function saveOutputEdit(id: string, _prev: string | null, form: FormData): Promise<string | null> {
+  const loiQuyen = await kiemQuyen('san-pham');
+  if (loiQuyen) return loiQuyen;
   const supabase = await supabaseServer();
   const { data: p } = await supabase.from('products').select('output').eq('id', id).single();
   if (!p?.output) return 'Chưa có bản viết.';
@@ -245,6 +257,7 @@ export async function saveOutputEdit(id: string, _prev: string | null, form: For
 }
 
 export async function setCategories(id: string, ids: number[]) {
+  if (await kiemQuyen('san-pham')) return;
   const supabase = await supabaseServer();
   await supabase.from('products').update({ category_ids: ids, updated_at: new Date().toISOString() }).eq('id', id);
   revalidatePath(`/products/${id}`);
@@ -252,6 +265,8 @@ export async function setCategories(id: string, ids: number[]) {
 
 /** Sản phẩm này đã có trên web chưa (nháp app tạo trước đó, hoặc sản phẩm cũ trùng SKU). */
 export async function kiemTraTrenWeb(id: string): Promise<{ ok: true; web: SanPhamWeb | null } | { ok: false; error: string }> {
+  const loiQuyen = await kiemQuyen('san-pham');
+  if (loiQuyen) return { ok: false, error: loiQuyen };
   const supabase = await supabaseServer();
   const { data: p } = await supabase.from('products').select('sku,woo_product_id').eq('id', id).single();
   if (!p) return { ok: false, error: 'Không thấy sản phẩm.' };
@@ -267,6 +282,8 @@ export async function kiemTraTrenWeb(id: string): Promise<{ ok: true; web: SanPh
  * 'cap-nhat' (giữ ảnh trong mô tả trên web) hoặc 'thay-the' (thay toàn bộ mô tả). Không bao giờ đổi trạng thái đăng.
  */
 export async function pushDraft(id: string, kieu?: KieuDayLai): Promise<string | null> {
+  const loiQuyen = await kiemQuyen('san-pham');
+  if (loiQuyen) return loiQuyen;
   const supabase = await supabaseServer();
   const { data: p } = await supabase
     .from('products')
@@ -324,6 +341,8 @@ export async function pushDraft(id: string, kieu?: KieuDayLai): Promise<string |
 
 /** Lưu link video (YouTube / TikTok, mỗi dòng một link). Link rút gọn TikTok được mở ra lấy link đầy đủ. */
 export async function luuVideo(id: string, _prev: string | null, form: FormData): Promise<string | null> {
+  const loiQuyen = await kiemQuyen('san-pham');
+  if (loiQuyen) return loiQuyen;
   const dong = String(form.get('video_links') ?? '')
     .split(/\s+/)
     .map((x) => x.trim())
@@ -349,6 +368,7 @@ export async function luuVideo(id: string, _prev: string | null, form: FormData)
 }
 
 export async function deleteProduct(id: string) {
+  if (await kiemQuyen('san-pham')) return;
   const supabase = await supabaseServer();
   const { data: p } = await supabase.from('products').select('batch_id').eq('id', id).single();
   await supabase.from('products').delete().eq('id', id);
@@ -383,6 +403,8 @@ async function insertVariants(
 }
 
 export async function createBatch(_prev: string | null, form: FormData): Promise<string | null> {
+  const loiQuyen = await kiemQuyen('san-pham');
+  if (loiQuyen) return loiQuyen;
   const type = String(form.get('type') ?? 'boots') as ProductType;
   if (!SPEC_FIELDS[type]) return 'Loại sản phẩm không hợp lệ.';
   const base_name = String(form.get('base_name') ?? '').trim();
@@ -419,6 +441,8 @@ export async function createBatch(_prev: string | null, form: FormData): Promise
 
 /** Lưu phiếu chung của lô và áp xuống mọi màu chưa đẩy lên web (thông số, ý chính). */
 export async function updateBatchSpec(batchId: string, _prev: string | null, form: FormData): Promise<string | null> {
+  const loiQuyen = await kiemQuyen('san-pham');
+  if (loiQuyen) return loiQuyen;
   const supabase = await supabaseServer();
   const { data: b } = await supabase.from('product_batches').select('type').eq('id', batchId).single();
   if (!b) return 'Không tìm thấy lô.';
@@ -450,6 +474,8 @@ export async function updateBatchSpec(batchId: string, _prev: string | null, for
 }
 
 export async function addVariants(batchId: string, _prev: string | null, form: FormData): Promise<string | null> {
+  const loiQuyen = await kiemQuyen('san-pham');
+  if (loiQuyen) return loiQuyen;
   const supabase = await supabaseServer();
   const { data: b } = await supabase.from('product_batches').select('id,type,base_name,price,sale_price,sizes,spec,notes').eq('id', batchId).single();
   if (!b) return 'Không tìm thấy lô.';
@@ -459,18 +485,24 @@ export async function addVariants(batchId: string, _prev: string | null, form: F
 }
 
 export async function writeBatch(batchId: string, mode: BatchMode): Promise<string | null> {
+  const loiQuyen = await kiemQuyen('san-pham');
+  if (loiQuyen) return loiQuyen;
   const err = await startBatchJob(batchId, 'generate', mode);
   revalidatePath(`/products/batch/${batchId}`);
   return err;
 }
 
 export async function researchBatch(batchId: string): Promise<string | null> {
+  const loiQuyen = await kiemQuyen('san-pham');
+  if (loiQuyen) return loiQuyen;
   const err = await startBatchJob(batchId, 'research');
   revalidatePath(`/products/batch/${batchId}`);
   return err;
 }
 
 export async function applyBatchFacts(batchId: string, _prev: string | null, form: FormData): Promise<string | null> {
+  const loiQuyen = await kiemQuyen('san-pham');
+  if (loiQuyen) return loiQuyen;
   const supabase = await supabaseServer();
   const { data: b } = await supabase.from('product_batches').select('type,spec,notes,research').eq('id', batchId).single();
   if (!b?.research) return 'Chưa có kết quả tìm kiếm.';
@@ -485,6 +517,7 @@ export async function applyBatchFacts(batchId: string, _prev: string | null, for
 
 /** Áp một bộ danh mục cho mọi màu chưa đẩy lên web. */
 export async function setBatchCategories(batchId: string, ids: number[]) {
+  if (await kiemQuyen('san-pham')) return;
   const supabase = await supabaseServer();
   await supabase
     .from('products')
@@ -495,6 +528,7 @@ export async function setBatchCategories(batchId: string, ids: number[]) {
 }
 
 export async function deleteBatch(batchId: string, withProducts: boolean) {
+  if (await kiemQuyen('san-pham')) return;
   const supabase = await supabaseServer();
   if (withProducts) await supabase.from('products').delete().eq('batch_id', batchId);
   await supabase.from('product_batches').delete().eq('id', batchId);
@@ -508,7 +542,7 @@ export async function checkImportSkus(
   skus: string[],
 ): Promise<{ ok: true; onWeb: { sku: string; name: string; status: string }[]; inApp: string[] } | { ok: false; error: string }> {
   const me = await currentUser();
-  if (me?.role !== 'admin' && me?.role !== 'staff') return { ok: false, error: 'Tài khoản chưa được cấp quyền.' };
+  if (!co(me, 'san-pham')) return { ok: false, error: 'Tài khoản chưa được cấp quyền.' };
   const list = [...new Set(skus.map((s) => s.trim()).filter(Boolean))].slice(0, IMPORT_MAX_ROWS);
   try {
     const supabase = await supabaseServer();
@@ -524,6 +558,8 @@ export async function checkImportSkus(
 }
 
 export async function createImport(type: ProductType, rows: ImportRow[], write: boolean): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const loiQuyen = await kiemQuyen('san-pham');
+  if (loiQuyen) return { ok: false, error: loiQuyen };
   if (!SPEC_FIELDS[type]) return { ok: false, error: 'Loại sản phẩm không hợp lệ.' };
   const valid = rows.filter((r) => r.name.trim() && r.sku.trim() && r.price);
   if (!valid.length) return { ok: false, error: 'Không có dòng hợp lệ nào.' };

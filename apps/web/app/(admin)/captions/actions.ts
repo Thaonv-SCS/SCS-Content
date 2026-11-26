@@ -1,11 +1,15 @@
 'use server';
 
+import { kiemQuyen } from '@/lib/auth';
+
 import { revalidatePath } from 'next/cache';
 import { captionHash, SHORT_CAPTION_MAX, type StyleNotes } from '@app/core';
 import { supabaseServer } from '@/lib/supabase';
 
 /** Dán nhiều caption một lúc, ngăn cách bằng một dòng chỉ có "---". */
 export async function addCaptions(_prev: string | null, form: FormData): Promise<string | null> {
+  const loiQuyen = await kiemQuyen('ban-tin-ql');
+  if (loiQuyen) return loiQuyen;
   const texts = String(form.get('captions') ?? '')
     .split(/^\s*-{3,}\s*$/m)
     .map((t) => t.trim())
@@ -34,12 +38,14 @@ export async function addCaptions(_prev: string | null, form: FormData): Promise
 }
 
 export async function deleteCaption(id: string) {
+  if (await kiemQuyen('ban-tin-ql')) return;
   const supabase = await supabaseServer();
   await supabase.from('captions').delete().eq('id', id);
   revalidatePath('/captions');
 }
 
 export async function saveStyleNotes(form: FormData) {
+  if (await kiemQuyen('ban-tin-ql')) return;
   const supabase = await supabaseServer();
   const { data: current } = await supabase.from('settings').select('value').eq('key', 'style_notes').maybeSingle();
   const { count } = await supabase.from('captions').select('*', { count: 'exact', head: true });

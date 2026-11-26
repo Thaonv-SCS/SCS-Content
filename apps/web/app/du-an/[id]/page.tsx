@@ -14,7 +14,7 @@ import {
   type TrangThaiDuAn,
   type YTuong,
 } from '@app/du-an';
-import { requireDuAn } from '@/lib/auth';
+import { co, requireDuAn } from '@/lib/auth';
 import { formatDateTime } from '@/lib/format';
 import { supabaseServer } from '@/lib/supabase';
 import { TuLamMoi } from '@/app/video/tu-lam-moi';
@@ -60,7 +60,7 @@ export default async function DuAnChiTiet({ params }: { params: Promise<{ id: st
         <span className="badge">{d.che_do === 'nhanh' ? '⚡ Làm nhanh' : 'Qua các bước duyệt'}</span>
       </div>
       <p className="meta">
-        Tạo {formatDateTime(d.tao_luc)} · cập nhật {formatDateTime(d.cap_nhat_luc)} · chi phí AI ${usd.toFixed(2)}
+        Tạo {formatDateTime(d.tao_luc)} · cập nhật {formatDateTime(d.cap_nhat_luc)}{co(me, 'chi-phi') && ` · chi phí AI $${usd.toFixed(2)}`}
       </p>
 
       <div className={`card status-line ${tt === 'loi' ? 'warn' : ''}`}>

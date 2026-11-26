@@ -1,4 +1,5 @@
 import { CATEGORY_LABEL } from '@app/core';
+import { requireQuyen } from '@/lib/auth';
 import { supabaseServer } from '@/lib/supabase';
 import { formatDateTime } from '@/lib/format';
 
@@ -16,6 +17,7 @@ type RawItemRow = {
 const LABEL: Record<string, string> = { ...CATEGORY_LABEL, discard: 'Loại' };
 
 export default async function RawItemsPage() {
+  await requireQuyen('ban-tin-ql');
   const supabase = await supabaseServer();
   const { data } = await supabase
     .from('raw_items')

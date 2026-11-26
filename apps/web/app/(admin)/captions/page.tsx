@@ -1,4 +1,5 @@
 import { CATEGORY_LABEL, isRunActive, STYLE_NOTES_REFRESH_EVERY, type RunStatus, type StyleNotes } from '@app/core';
+import { requireQuyen } from '@/lib/auth';
 import { supabaseServer } from '@/lib/supabase';
 import { formatDateTime } from '@/lib/format';
 import { deleteCaption, saveStyleNotes } from './actions';
@@ -20,6 +21,7 @@ type CaptionRow = {
 const LABEL: Record<string, string> = { ...CATEGORY_LABEL, other: 'Khác' };
 
 export default async function CaptionsPage() {
+  await requireQuyen('ban-tin-ql');
   const supabase = await supabaseServer();
   const [{ data, error, count }, { data: settings }] = await Promise.all([
     supabase

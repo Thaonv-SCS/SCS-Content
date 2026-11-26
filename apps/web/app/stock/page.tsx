@@ -1,9 +1,9 @@
-import { requireTeam } from '@/lib/auth';
+import { requireQuyen } from '@/lib/auth';
 import { supabaseServer } from '@/lib/supabase';
 import { StockManager, type RunSummary } from './manager';
 
 export default async function StockPage() {
-  const me = await requireTeam();
+  const me = await requireQuyen('cap-nhat');
   const supabase = await supabaseServer();
   const [{ data: changes }, { data: people }] = await Promise.all([
     supabase

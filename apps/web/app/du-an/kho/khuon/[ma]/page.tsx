@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { Khuon } from '@app/du-an';
-import { requireDuAn } from '@/lib/auth';
+import { requireDuAn, suaKho } from '@/lib/auth';
 import { supabaseServer } from '@/lib/supabase';
 import { KhuonForm, VideoMauForm, XoaKhuonButton } from '../../../forms';
 
@@ -9,7 +9,7 @@ export default async function KhuonChiTietPage({ params }: { params: Promise<{ m
   const me = await requireDuAn();
   const { ma } = await params;
   const supabase = await supabaseServer();
-  const sua = me.role === 'admin';
+  const sua = suaKho(me);
   const [{ data }, { data: may }] = await Promise.all([
     supabase.from('du_an_khuon').select('ma,ten,thu_tu,noi_dung,video_mau').eq('ma', ma).maybeSingle(),
     // phong cách lấy từ các máy dựng (mỗi máy báo thư mục "Phong cach" nó có); chỉ admin đọc được bảng máy

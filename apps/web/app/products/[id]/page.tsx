@@ -1,13 +1,13 @@
 import { notFound } from 'next/navigation';
 import { PRODUCT_TYPE_LABEL, SPEC_FIELDS, type ProductOutput, type ProductType, type ResearchResult } from '@app/products';
-import { requireTeam } from '@/lib/auth';
+import { requireQuyen } from '@/lib/auth';
 import { supabaseServer } from '@/lib/supabase';
 import { loadCategoryOptions } from '@/lib/categories';
 import { goTreo } from '@/lib/treo';
 import { Workspace, type ProductView } from './workspace';
 
 export default async function ProductPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireTeam();
+  await requireQuyen('san-pham');
   const { id } = await params;
   const supabase = await supabaseServer();
   const [{ data: p }, categories, { data: vd }] = await Promise.all([

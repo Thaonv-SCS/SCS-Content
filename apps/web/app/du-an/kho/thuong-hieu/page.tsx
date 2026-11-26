@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { CAU_HOI_THUONG_HIEU } from '@app/du-an';
-import { requireDuAn } from '@/lib/auth';
+import { requireDuAn, suaKho } from '@/lib/auth';
 import { formatDateTime } from '@/lib/format';
 import { supabaseServer } from '@/lib/supabase';
 import { ThuongHieuForm } from '../../forms';
@@ -20,7 +20,7 @@ export default async function ThuongHieuPage() {
         {da}/{CAU_HOI_THUONG_HIEU.length} câu đã trả lời · cập nhật {formatDateTime(data?.cap_nhat_luc ?? null)}. Mọi bước (ý tưởng, kịch bản…) đọc phần này. Câu có nhãn{' '}
         <span className="badge warn">nguồn chuẩn</span> là thông tin AI tuyệt đối không được nói khác — ghi đúng nguyên văn shop cam kết. Câu để trống = AI không tự bịa phần đó.
       </p>
-      <ThuongHieuForm traLoi={traLoi} sua={me.role === 'admin'} />
+      <ThuongHieuForm traLoi={traLoi} sua={suaKho(me)} />
     </>
   );
 }

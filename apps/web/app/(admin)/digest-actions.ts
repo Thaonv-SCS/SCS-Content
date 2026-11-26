@@ -1,5 +1,7 @@
 'use server';
 
+import { kiemQuyen } from '@/lib/auth';
+
 import { revalidatePath } from 'next/cache';
 import { captionHash, SHORT_CAPTION_MAX } from '@app/core';
 import { supabaseServer } from '@/lib/supabase';
@@ -12,6 +14,7 @@ export type EditableFields = {
 };
 
 export async function decide(suggestionId: string, action: 'pick' | 'skip', tags: string[]) {
+  if (await kiemQuyen('ban-tin')) return;
   const supabase = await supabaseServer();
   await supabase.from('suggestions').update({ status: action === 'pick' ? 'picked' : 'skipped' }).eq('id', suggestionId);
   await supabase.from('feedback').insert({ suggestion_id: suggestionId, action, tags });
@@ -23,6 +26,7 @@ export async function decide(suggestionId: string, action: 'pick' | 'skip', tags
  * Caption đã sửa được đưa vào kho caption làm mẫu giọng văn (bản sửa mới thay bản sửa cũ của cùng gợi ý).
  */
 export async function saveEdit(suggestionId: string, after: EditableFields, tags: string[]) {
+  if (await kiemQuyen('ban-tin')) return;
   const supabase = await supabaseServer();
   const { data: before } = await supabase
     .from('suggestions')
@@ -53,6 +57,7 @@ export async function saveEdit(suggestionId: string, after: EditableFields, tags
 }
 
 export async function undo(suggestionId: string) {
+  if (await kiemQuyen('ban-tin')) return;
   const supabase = await supabaseServer();
   await supabase.from('suggestions').update({ status: 'new' }).eq('id', suggestionId);
   revalidatePath('/');

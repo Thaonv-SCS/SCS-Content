@@ -1,12 +1,13 @@
 import Link from 'next/link';
 import { CAU_HOI_THUONG_HIEU, NHAN_TRANG_THAI, tenBuoc, type Khuon, type NoiDungKhanGia, type TrangThaiDuAn } from '@app/du-an';
-import { requireDuAn } from '@/lib/auth';
+import { co, requireDuAn } from '@/lib/auth';
 import { formatDateTime } from '@/lib/format';
 import { supabaseServer } from '@/lib/supabase';
 import { TranForm } from './forms';
 
 export default async function DuAnPage() {
   const me = await requireDuAn();
+  const xemTien = co(me, 'chi-phi');
   const supabase = await supabaseServer();
   const [{ data: kt, error }, { data: duLieu }, { data: khuon }, { data: chi }, { data: tran }] = await Promise.all([
     supabase.from('du_an_kien_thuc').select('muc,noi_dung,cap_nhat_luc'),
@@ -55,7 +56,7 @@ export default async function DuAnPage() {
         <div className="card scroll">
           <table>
             <thead>
-              <tr><th>Dự án</th><th>Bước</th><th>Trạng thái</th><th>Cách làm</th><th>Ai tạo</th><th>Cập nhật</th><th>Chi phí</th></tr>
+              <tr><th>Dự án</th><th>Bước</th><th>Trạng thái</th><th>Cách làm</th><th>Ai tạo</th><th>Cập nhật</th>{xemTien && <th>Chi phí</th>}</tr>
             </thead>
             <tbody>
               {dsDuAn.map((p) => (
@@ -68,7 +69,7 @@ export default async function DuAnPage() {
                   <td>{p.che_do === 'nhanh' ? '⚡ nhanh' : 'duyệt'}</td>
                   <td>{tenNguoi.get(p.tao_boi ?? '') ?? '—'}</td>
                   <td>{formatDateTime(p.cap_nhat_luc)}</td>
-                  <td>${(chiPhi.get(p.id) ?? 0).toFixed(2)}</td>
+                  {xemTien && <td>${(chiPhi.get(p.id) ?? 0).toFixed(2)}</td>}
                 </tr>
               ))}
             </tbody>

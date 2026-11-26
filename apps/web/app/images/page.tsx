@@ -1,11 +1,11 @@
-import { requireTeam } from '@/lib/auth';
+import { requireQuyen } from '@/lib/auth';
 import { supabaseServer } from '@/lib/supabase';
 import { ThumbUploader } from './thumb-uploader';
 import { ImageUploader } from './uploader';
 import { VideoUploader } from './video-uploader';
 
 export default async function ImagesPage() {
-  const me = await requireTeam();
+  const me = await requireQuyen('up-anh');
   const supabase = await supabaseServer();
   const [{ data: history }, { data: people }] = await Promise.all([
     supabase.from('image_uploads').select('id,created_by,woo_id,sku,name,mode,added,images_before,images_after,created_at').order('created_at', { ascending: false }).limit(30),

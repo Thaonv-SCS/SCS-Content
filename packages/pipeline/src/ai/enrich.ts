@@ -1,7 +1,7 @@
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import { z } from 'zod';
 import { CATEGORY_LABEL, findWatchedPlayer, GLOSSARY, STYLE_GUIDE, type Category } from '@app/core';
-import { anthropic, MODELS, type Budget } from './client.ts';
+import { anthropic, type Budget } from './client.ts';
 
 export const PROMPT_VERSION = 'enrich-v3';
 
@@ -80,13 +80,14 @@ export async function enrichStory(
       .join('\n\n') +
     (catalogLines.length ? `\n\nDữ liệu danh mục về giày của cầu thủ (không phải từ bài nguồn):\n${catalogLines.join('\n')}` : '');
 
+  const mh = await budget.moHinh('enrich');
   const res = await anthropic.beta.messages.parse({
-    model: MODELS.write,
+    model: mh.model,
     max_tokens: 16000,
     betas: ['server-side-fallback-2026-07-01'],
     fallbacks: 'default',
     system: [{ type: 'text', text: ctx.system, cache_control: { type: 'ephemeral' } }],
-    output_config: { format: betaZodOutputFormat(Schema), effort: 'medium' },
+    output_config: { format: betaZodOutputFormat(Schema), effort: mh.effort },
     messages: [{ role: 'user', content: body }],
   });
   await budget.record('enrich', res.model, res.usage);

@@ -5,7 +5,7 @@
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
-import { anthropic, assertBudget, recordCall, WRITE_MODEL } from './ai.ts';
+import { anthropic, assertBudget, layMoHinh, recordCall } from './ai.ts';
 import { exampleToText } from './html.ts';
 import type { ProductOutput } from './types.ts';
 
@@ -68,10 +68,11 @@ export async function refreshProductStyle(db: SupabaseClient, force = false): Pr
     if (!pairs.length) throw new Error('Các bản sửa chưa khác gì bản AI viết — chưa có gì để học.');
     const recent = pairs.slice(-MAX_PAIRS);
 
+    const mh = await layMoHinh(db, 'product-style');
     const res = await anthropic.messages.parse({
-      model: WRITE_MODEL,
+      model: mh.model,
       max_tokens: 8000,
-      output_config: { format: zodOutputFormat(RulesSchema), effort: 'medium' },
+      output_config: { format: zodOutputFormat(RulesSchema), effort: mh.effort },
       messages: [
         {
           role: 'user',

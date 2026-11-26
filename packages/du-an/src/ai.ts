@@ -1,11 +1,16 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { costOf, type TokenUsage } from '@app/core';
+import { costOf, moHinhCho, type CauHinhMoHinh, type TokenUsage } from '@app/core';
 
 export const anthropic = new Anthropic();
 
+/** Mô hình + mức suy nghĩ theo Cài đặt → Mô hình AI (chưa chạy migration 0026 thì dùng mặc định). Ghi đè = chọn riêng của dự án. */
+export async function layMoHinh(db: SupabaseClient, ma: string, ghiDe?: unknown): Promise<CauHinhMoHinh> {
+  const { data, error } = await db.rpc('mo_hinh_ai');
+  return moHinhCho(ma, error ? null : data, ghiDe);
+}
+
 /** Mô hình mạnh cho tư duy (insight, ý tưởng, kịch bản); mô hình rẻ cho đọc dữ liệu thô khối lượng lớn. */
-export const MODEL_MANH = process.env.DU_AN_MODEL || 'claude-opus-5-5';
 export const MODEL_RE = process.env.DU_AN_MODEL_RE || 'claude-haiku-5-5';
 
 /** Trần chi phí riêng của Dự án video (settings.du_an_tran_ngay_usd, mặc định $3/ngày). */

@@ -1,14 +1,14 @@
 import Link from 'next/link';
 import { LOAI_LABEL, NGUON_LABEL, type NoiDungKhanGia } from '@app/du-an';
 import { Markdown } from '@/app/video/markdown';
-import { requireDuAn } from '@/lib/auth';
+import { requireDuAn, suaKho } from '@/lib/auth';
 import { formatDateTime } from '@/lib/format';
 import { supabaseServer } from '@/lib/supabase';
 import { DuyetInsightForm, NhapDuLieuForm, NhapTinNhanForm, TomTatButton, XoaDuLieuButton } from '../../forms';
 
 export default async function KhanGiaPage() {
   const me = await requireDuAn();
-  const admin = me.role === 'admin';
+  const admin = suaKho(me);
   const supabase = await supabaseServer();
   const [{ data: kt }, { data: duLieu }] = await Promise.all([
     supabase.from('du_an_kien_thuc').select('noi_dung,job_status,job_error,job_started_at').eq('muc', 'khan-gia').maybeSingle(),

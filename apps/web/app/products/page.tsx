@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { PRODUCT_TYPE_LABEL, type ProductType } from '@app/products';
-import { requireTeam } from '@/lib/auth';
+import { co, requireQuyen } from '@/lib/auth';
 import { supabaseServer } from '@/lib/supabase';
 import { formatDateTime } from '@/lib/format';
 import { SyncWebsiteButton } from './sync-button';
@@ -39,9 +39,10 @@ async function costByPerson(supabase: Awaited<ReturnType<typeof supabaseServer>>
 }
 
 export default async function ProductsPage() {
-  const me = await requireTeam();
+  const me = await requireQuyen('san-pham');
   const supabase = await supabaseServer();
   const isAdmin = me.role === 'admin';
+  const xemTien = co(me, 'chi-phi');
   const [{ data }, { count: catCount }, { count: exCount }, costs] = await Promise.all([
     supabase
       .from('products')
@@ -53,6 +54,14 @@ export default async function ProductsPage() {
     isAdmin ? costByPerson(supabase) : Promise.resolve([] as [string, number][]),
   ]);
   const rows = (data ?? []) as unknown as Row[];
+  // Chi phí AI từng sản phẩm (chỉ tính từ khi có migration 0026; chưa chạy migration thì cột hiện "—")
+  const { data: cp } = xemTien && rows.length ? await supabase.rpc('chi_phi_san_pham', { p_ids: rows.map((r) => r.id) }) : { data: [] };
+  const chiPhi = new Map(((cp ?? []) as { product_id: string; usd: number; so_lan: number }[]).map((c) => [c.product_id, c]));
+  const tienSp = (id: string) => {
+    const c = chiPhi.get(id);
+    if (!c || !(Number(c.usd) > 0)) return <span className="meta">—</span>;
+    return <span title={`${c.so_lan} lần viết bằng AI (gồm cả viết lại)`}>${Number(c.usd).toFixed(3)}</span>;
+  };
 
   const status = (r: Row) =>
     r.woo_edit_url ? (
@@ -96,6 +105,7 @@ export default async function ProductsPage() {
         </div>
       )}
 
+      {xemTien && <p className="meta">Cột Chi phí AI chỉ tính từ đợt cập nhật 26/11/2026 — sản phẩm viết trước đó hiện “—” vì lúc đó app chưa ghi chi phí theo từng sản phẩm.</p>}
       <div className="card scroll">
         <table>
           <thead>
@@ -103,6 +113,7 @@ export default async function ProductsPage() {
               <th>Sản phẩm</th>
               <th>Loại</th>
               <th>Trạng thái</th>
+              {xemTien && <th title="Tổng tiền AI đã dùng cho sản phẩm này: viết, viết lại, tìm thông tin (phần tìm chung của lô chia đều cho các màu)">Chi phí AI</th>}
               <th>Cập nhật</th>
             </tr>
           </thead>
@@ -123,12 +134,13 @@ export default async function ProductsPage() {
                 </td>
                 <td>{PRODUCT_TYPE_LABEL[r.type]}</td>
                 <td>{status(r)}</td>
+                {xemTien && <td>{tienSp(r.id)}</td>}
                 <td>{formatDateTime(r.updated_at)}</td>
               </tr>
             ))}
             {!rows.length && (
               <tr>
-                <td colSpan={4} className="muted">Chưa có sản phẩm nào.</td>
+                <td colSpan={xemTien ? 5 : 4} className="muted">Chưa có sản phẩm nào.</td>
               </tr>
             )}
           </tbody>

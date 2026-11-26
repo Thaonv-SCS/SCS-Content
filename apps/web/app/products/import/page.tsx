@@ -1,10 +1,10 @@
 import Link from 'next/link';
 import { PRODUCT_TYPE_LABEL } from '@app/products';
-import { requireTeam } from '@/lib/auth';
+import { requireQuyen } from '@/lib/auth';
 import { ImportForm } from './form';
 
 export default async function ImportPage() {
-  await requireTeam();
+  await requireQuyen('san-pham');
   return (
     <>
       <p className="meta">

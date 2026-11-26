@@ -14,14 +14,13 @@ import {
   videoCuaSanPham,
   type UploadedImage,
 } from '@app/products';
-import { currentUser } from '@/lib/auth';
+import { kiemQuyen } from '@/lib/auth';
 import { supabaseServer } from '@/lib/supabase';
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 
 async function team(): Promise<string | null> {
-  const me = await currentUser();
-  return me && (me.role === 'admin' || me.role === 'staff') ? null : 'Tài khoản chưa được cấp quyền.';
+  return kiemQuyen('up-anh');
 }
 
 /** Alt ảnh viết trong app (Post sản phẩm) theo SKU — không có thì để tên sản phẩm. */

@@ -3,7 +3,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { fetchProductFacts, type ProductFacts } from '@app/products';
-import { anthropic, ghiChiPhi, kiemTraTran, layChu, MODEL_MANH } from './ai.ts';
+import { anthropic, ghiChiPhi, kiemTraTran, layChu, layMoHinh } from './ai.ts';
 import type { NoiDungKhanGia } from './khan-gia.ts';
 import { khuonChoAI, type Khuon } from './khuon.ts';
 import { thuongHieuChoAI, type TraLoiThuongHieu } from './thuong-hieu.ts';
@@ -146,7 +146,8 @@ export async function boiCanh(db: SupabaseClient): Promise<BoiCanh> {
 
 async function goi<T>(
   db: SupabaseClient,
-  duAnId: string,
+  d: DuAnRow,
+  /** y-tuong / ke-hoach / kich-ban / doan / shotlist — vừa là mã việc chọn mô hình, vừa ghi chi phí "du-an:<buoc>" */
   buoc: string,
   system: Anthropic.TextBlockParam[],
   noiDung: string,
@@ -156,17 +157,18 @@ async function goi<T>(
   // Gửi khung JSON nhưng TỰ đọc kết quả (sau khi kiểm tra bị cắt chưa) — để AI viết quá dài báo lỗi dễ hiểu,
   // không phải "Unterminated string in JSON". Dùng stream vì max_tokens lớn (SDK không cho gọi thường).
   const { parse: docKetQua, ...khung } = zodOutputFormat(schema);
+  const mh = await layMoHinh(db, `du-an:${buoc}`, d.mo_hinh?.[buoc]);
   const res = await anthropic.messages
     .stream({
-      model: MODEL_MANH,
+      model: mh.model,
       max_tokens: 32000,
       thinking: { type: 'adaptive' },
       system,
       messages: [{ role: 'user', content: noiDung }],
-      output_config: { format: khung, effort: 'high' },
+      output_config: { format: khung, effort: mh.effort },
     })
     .finalMessage();
-  await ghiChiPhi(db, buoc, res.model, res.usage, duAnId);
+  await ghiChiPhi(db, buoc, res.model, res.usage, d.id);
   if (res.stop_reason === 'refusal') throw new Error('AI từ chối làm bước này.');
   if (res.stop_reason === 'max_tokens') throw new Error('AI viết quá dài, bị cắt giữa chừng — bấm làm lại (hoặc góp ý "viết gọn hơn").');
   let data: T;
@@ -187,6 +189,8 @@ export interface DuAnRow {
   san_pham: ProductFacts[];
   che_do: 'duyet' | 'nhanh';
   buoc: Buoc;
+  /** mô hình chọn riêng cho dự án này (rỗng = theo Cài đặt) */
+  mo_hinh?: Record<string, unknown>;
 }
 
 export interface PhienBanRow {
@@ -251,7 +255,7 @@ export async function chayYTuong(db: SupabaseClient, d: DuAnRow, bc: BoiCanh, ye
   const cu = yeuCau ? await banMoiNhat(db, d.id, 'y-tuong') : null;
   const r = await goi(
     db,
-    d.id,
+    d,
     'y-tuong',
     bc.system,
     [
@@ -279,7 +283,7 @@ export async function chayKeHoach(db: SupabaseClient, d: DuAnRow, bc: BoiCanh, y
   const cu = yeuCau ? await banMoiNhat(db, d.id, 'ke-hoach') : null;
   const r = await goi(
     db,
-    d.id,
+    d,
     'ke-hoach',
     bc.system,
     [
@@ -311,7 +315,7 @@ export async function chayKichBan(db: SupabaseClient, d: DuAnRow, bc: BoiCanh, y
   const cu = yeuCau ? await banMoiNhat(db, d.id, 'kich-ban') : null;
   const r = await goi(
     db,
-    d.id,
+    d,
     'kich-ban',
     bc.system,
     [
@@ -349,7 +353,7 @@ export async function chayShotlist(db: SupabaseClient, d: DuAnRow, bc: BoiCanh, 
   const cu = yeuCau ? await banMoiNhat(db, d.id, 'shotlist') : null;
   const r = await goi(
     db,
-    d.id,
+    d,
     'shotlist',
     bc.system,
     [
@@ -393,8 +397,8 @@ VIẾT GỌN: mỗi ô vài chữ tới 1 câu (co_canh, goc_may, chuyen_dong ch
 export async function vietLaiDoan(db: SupabaseClient, d: DuAnRow, bc: BoiCanh, kb: KichBan, viTri: number, yeuCau: string) {
   const r = await goi(
     db,
-    d.id,
-    'kich-ban',
+    d,
+    'doan',
     bc.system,
     [
       briefChoAI(d),

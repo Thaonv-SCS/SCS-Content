@@ -1,5 +1,7 @@
 'use server';
 
+import { kiemAdmin, kiemQuyen } from '@/lib/auth';
+
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
 import { revalidatePath } from 'next/cache';
@@ -67,6 +69,8 @@ async function startRun(task: RunTask, force: boolean): Promise<string | null> {
 
 /** Nút "Chạy ngay": lấy bài & tạo bản tin. */
 export async function runNow(_prev: string | null, form: FormData): Promise<string | null> {
+  const loiQuyen = await kiemAdmin();
+  if (loiQuyen) return loiQuyen;
   const error = await startRun('digest', form.get('force') === 'on');
   revalidatePath('/settings');
   return error;
@@ -74,6 +78,8 @@ export async function runNow(_prev: string | null, form: FormData): Promise<stri
 
 /** Nút "Cập nhật bằng AI" ở kho caption. */
 export async function runStyle(_prev: string | null): Promise<string | null> {
+  const loiQuyen = (await kiemAdmin()) && (await kiemQuyen('ban-tin-ql'));
+  if (loiQuyen) return loiQuyen;
   const error = await startRun('style', false);
   revalidatePath('/captions');
   return error;

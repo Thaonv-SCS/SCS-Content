@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { anthropic, ghiChiPhi, kiemTraTran, layChu, MODEL_MANH, MODEL_RE } from './ai.ts';
+import { anthropic, ghiChiPhi, kiemTraTran, layChu, layMoHinh, MODEL_RE } from './ai.ts';
 import { thuongHieuChoAI, type TraLoiThuongHieu } from './thuong-hieu.ts';
 
 /**
@@ -161,11 +161,13 @@ export async function tomTatKhanGia(db: SupabaseClient): Promise<void> {
     .map((f) => `### ${NGUON_LABEL[f.nguon] ?? f.nguon} — ${LOAI_LABEL[f.loai] ?? f.loai} — ${f.ten}${f.tu_ngay ? ` (${f.tu_ngay} → ${f.den_ngay ?? ''})` : ''}\n${f.tom_tat}`)
     .join('\n\n');
 
+  const mh = await layMoHinh(db, 'du-an:insight');
   const res = await anthropic.messages
     .stream({
-      model: MODEL_MANH,
+      model: mh.model,
       max_tokens: 16000,
       thinking: { type: 'adaptive' },
+      output_config: { effort: mh.effort },
       system: HUONG_DAN_INSIGHT,
       messages: [
         {

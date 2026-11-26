@@ -1,10 +1,10 @@
 import Link from 'next/link';
 import { PRODUCT_TYPE_LABEL, SPEC_FIELDS } from '@app/products';
-import { requireTeam } from '@/lib/auth';
+import { requireQuyen } from '@/lib/auth';
 import { NewProductForm } from './form';
 
 export default async function NewProductPage() {
-  await requireTeam();
+  await requireQuyen('san-pham');
   return (
     <>
       <h1>Sản phẩm mới</h1>

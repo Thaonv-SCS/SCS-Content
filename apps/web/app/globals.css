@@ -264,3 +264,9 @@ summary:hover { color: var(--accent); }
 @keyframes thanh-tai { from { background-position: -60% 0; } to { background-position: 160% 0; } }
 body:has(.thanh-tai) { cursor: progress; }
 @media (prefers-reduced-motion: reduce) { a, button { transition: none; } a:active, button:active { transform: none !important; } }
+
+/* Cài đặt → Phân quyền */
+.phan-quyen-luoi { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); }
+.phan-quyen-luoi > div { display: flex; flex-direction: column; gap: 4px; }
+.phan-quyen-bang td, .phan-quyen-bang th { padding: 2px 8px 2px 0; }
+.phan-quyen-bang input { width: auto; margin: 0; }

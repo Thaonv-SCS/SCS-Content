@@ -1,10 +1,14 @@
 import { isRunActive, parseSettings, type RunStatus } from '@app/core';
+import Link from 'next/link';
+import { requireAdmin } from '@/lib/auth';
 import { supabaseServer } from '@/lib/supabase';
 import { saveSettings } from './actions';
 import { RunPanel } from './run-panel';
 import { CostReport, KY, type Ky } from './cost-report';
+import { MoHinhAI } from './mo-hinh';
 
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ ky?: string }> }) {
+  await requireAdmin();
   const supabase = await supabaseServer();
   const { ky: kyRaw } = await searchParams;
   const ky: Ky = KY.some((k) => k.ma === kyRaw) ? (kyRaw as Ky) : 'thang-nay';
@@ -36,6 +40,11 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         ) : (
           <span className="on">▶ Lịch tự chạy đang BẬT — 6h sáng mỗi ngày.</span>
         )}
+      </div>
+
+      <div className="inline wrap">
+        <Link href="/settings/phan-quyen" className="button ghost-button">👥 Phân quyền</Link>
+        <Link href="#mo-hinh" className="button ghost-button">🤖 Mô hình AI</Link>
       </div>
 
       <RunPanel lastRun={lastRun} active={isRunActive(lastRun)} />
@@ -73,6 +82,9 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           <button type="submit">Lưu cài đặt</button>
         </div>
       </form>
+
+      <h2 id="mo-hinh">Mô hình AI</h2>
+      <MoHinhAI supabase={supabase} caiDat={rows?.find((r) => r.key === 'mo_hinh_ai')?.value ?? null} />
 
       <h2>Chi phí AI</h2>
       <CostReport supabase={supabase} ky={ky} />

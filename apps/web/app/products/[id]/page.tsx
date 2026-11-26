@@ -3,6 +3,7 @@ import { PRODUCT_TYPE_LABEL, SPEC_FIELDS, type ProductOutput, type ProductType, 
 import { requireTeam } from '@/lib/auth';
 import { supabaseServer } from '@/lib/supabase';
 import { loadCategoryOptions } from '@/lib/categories';
+import { goTreo } from '@/lib/treo';
 import { Workspace, type ProductView } from './workspace';
 
 export default async function ProductPage({ params }: { params: Promise<{ id: string }> }) {
@@ -13,7 +14,7 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
     supabase
       .from('products')
       .select(
-        'id,type,name,sku,price,sale_price,color,batch_id,sizes,spec,notes,research,output,category_ids,job,job_status,job_error,woo_edit_url,pushed_at,product_batches(base_name)',
+        'id,type,name,sku,price,sale_price,color,batch_id,sizes,spec,notes,research,output,category_ids,job,job_status,job_error,job_started_at,woo_edit_url,pushed_at,product_batches(base_name)',
       )
       .eq('id', id)
       .maybeSingle(),
@@ -24,7 +25,7 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
   if (!p) notFound();
 
   const batch = (p as unknown as { product_batches?: { base_name: string } | null }).product_batches;
-  const product = { ...p, video_links: (vd?.video_links as string[] | null) ?? [], batch_name: batch?.base_name ?? null } as unknown as ProductView & {
+  const product = { ...goTreo(p, p.job_started_at), video_links: (vd?.video_links as string[] | null) ?? [], batch_name: batch?.base_name ?? null } as unknown as ProductView & {
     output: ProductOutput | null;
     research: ResearchResult | null;
   };

@@ -18,6 +18,7 @@ import {
   type KichBan,
   type NoiDungKhanGia,
   type NoiDungKhuon,
+  type Shotlist,
   type VideoMau,
 } from '@app/du-an';
 import { currentUser } from '@/lib/auth';
@@ -345,7 +346,7 @@ export async function duyetBuoc(id: string, buoc: Buoc, _prev: string | null, fo
   await supabase.from('du_an_phien_ban').update({ duyet, duyet_boi: me?.id ?? null, duyet_luc: new Date().toISOString() }).eq('id', pb.id);
   const sau = buocSau(buoc);
   if (!sau) {
-    await supabase.from('du_an').update({ trang_thai: 'xong', thong_bao: 'Kịch bản đã chốt', cap_nhat_luc: new Date().toISOString() }).eq('id', id);
+    await supabase.from('du_an').update({ trang_thai: 'xong', thong_bao: 'Shotlist đã chốt — sẵn sàng đi quay', cap_nhat_luc: new Date().toISOString() }).eq('id', id);
     revalidatePath(`/du-an/${id}`);
     return null;
   }
@@ -377,6 +378,30 @@ export async function chayLai(id: string): Promise<string | null> {
   if (loi) return loi;
   if (await dangChay(id)) return 'AI đang làm, đợi xong đã.';
   return chayBuoc(id, { kind: 'buoc', id, buoc: data.buoc as Buoc }, `AI đang làm: ${tenBuoc(data.buoc)}…`);
+}
+
+/** Lập (lại) shotlist từ kịch bản hiện tại — cho dự án chốt kịch bản trước khi có bước shotlist, hoặc kịch bản đã sửa sau đó. */
+export async function lapShotlist(id: string): Promise<string | null> {
+  const loi = await coQuyen('shotlist', 'lam');
+  if (loi) return loi;
+  if (await dangChay(id)) return 'AI đang làm, đợi xong đã.';
+  return chayBuoc(id, { kind: 'buoc', id, buoc: 'shotlist' }, 'AI đang làm: Đạo diễn + Shotlist…');
+}
+
+/** Lưu shotlist sửa tay thành phiên bản mới. */
+export async function luuShotlistSuaTay(id: string, sl: Shotlist): Promise<string | null> {
+  const loi = await coQuyen('shotlist', 'lam');
+  if (loi) return loi;
+  if (await dangChay(id)) return 'AI đang làm, đợi xong đã.';
+  const canh = sl.canh.filter((c) => c.mo_ta.trim() || c.thoai.trim()).map((c, i) => ({ ...c, ma: `C${String(i + 1).padStart(2, '0')}`, so_lan: Number(c.so_lan) || 1 }));
+  // mã cảnh đổi khi xóa bớt → sửa lại thứ tự quay
+  const doi = new Map(sl.canh.filter((c) => c.mo_ta.trim() || c.thoai.trim()).map((c, i) => [c.ma, canh[i]!.ma]));
+  const thu_tu_quay = sl.thu_tu_quay.map((n) => ({ ...n, canh: n.canh.flatMap((m) => (doi.has(m) ? [doi.get(m)!] : [])) })).filter((n) => n.canh.length);
+  const supabase = await supabaseServer();
+  const { error } = await supabase.from('du_an_phien_ban').insert({ du_an_id: id, buoc: 'shotlist', nguon: 'sua-tay', noi_dung: { ...sl, canh, thu_tu_quay }, yeu_cau: 'Sửa tay' });
+  if (error) return `Lỗi lưu: ${error.message}`;
+  revalidatePath(`/du-an/${id}`);
+  return null;
 }
 
 export async function vietLaiDoanKB(id: string, doan: number, yeu_cau: string): Promise<string | null> {

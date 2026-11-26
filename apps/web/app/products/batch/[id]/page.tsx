@@ -3,6 +3,7 @@ import { PRODUCT_TYPE_LABEL, SPEC_FIELDS, type ProductType } from '@app/products
 import { requireTeam } from '@/lib/auth';
 import { supabaseServer } from '@/lib/supabase';
 import { loadCategoryOptions } from '@/lib/categories';
+import { goTreo } from '@/lib/treo';
 import { BatchWorkspace, type BatchView, type VariantRow } from './workspace';
 
 export default async function BatchPage({ params }: { params: Promise<{ id: string }> }) {
@@ -12,19 +13,22 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
   const [{ data: b }, { data: rows }, categories] = await Promise.all([
     supabase
       .from('product_batches')
-      .select('id,kind,type,base_name,price,sale_price,sizes,spec,notes,research,job,job_status,job_error')
+      .select('id,kind,type,base_name,price,sale_price,sizes,spec,notes,research,job,job_status,job_error,job_started_at')
       .eq('id', id)
       .maybeSingle(),
     supabase
       .from('products')
-      .select('id,name,sku,color,price,sale_price,sizes,category_ids,job_status,job_error,output,woo_edit_url')
+      .select('id,name,sku,color,price,sale_price,sizes,category_ids,job_status,job_error,job_started_at,output,woo_edit_url')
       .eq('batch_id', id)
       .order('created_at'),
     loadCategoryOptions(supabase),
   ]);
   if (!b) notFound();
+  const lo = goTreo(b, b.job_started_at);
+  const loDangChay = ['queued', 'running'].includes(lo.job_status);
 
-  const variants: VariantRow[] = (rows ?? []).map((r) => ({
+  // màu đang chờ trong lô: lô còn chạy thì tính theo giờ bắt đầu của lô; lô đã dừng / treo mà màu vẫn "đang" → treo
+  const variants: VariantRow[] = (rows ?? []).map((r0) => goTreo(r0, loDangChay ? (r0.job_started_at ?? b.job_started_at) : r0.job_started_at)).map((r) => ({
     id: r.id,
     name: r.name,
     sku: r.sku,
@@ -41,7 +45,7 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
 
   return (
     <BatchWorkspace
-      batch={b as BatchView}
+      batch={lo as BatchView}
       variants={variants}
       fields={SPEC_FIELDS[b.type as ProductType]}
       typeLabel={PRODUCT_TYPE_LABEL[b.type as ProductType]}

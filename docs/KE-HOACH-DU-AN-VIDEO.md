@@ -1,4 +1,4 @@
-# Kế hoạch module "Dự án video" (tiền kỳ → nối Video editor)
+﻿# Kế hoạch module "Dự án video" (tiền kỳ → nối Video editor)
 
 Chốt: 2026-11-20. File này là kế hoạch chi tiết của module; tổng quan cả app ở `LO-TRINH.md`.
 Mỗi khi xong một phần hoặc đổi quyết định → sửa cột **Trạng thái** và mục **Nhật ký quyết định**.
@@ -33,7 +33,7 @@ Brief → ① Ý tưởng → ② Kế hoạch nội dung → ③ Kịch bản �
 | Giai đoạn | Nội dung | Trạng thái |
 |---|---|---|
 | **A** | Kho tri thức + Brief → ① Ý tưởng → ② Kế hoạch → ③ Kịch bản (duyệt hoặc làm nhanh) | 🔄 Đang làm |
-| **B** | ④ Đạo diễn + shotlist (mã cảnh, cỡ cảnh, góc máy, đạo cụ, checklist buổi quay) · quy ước đặt tên footage theo mã cảnh · Video editor đọc kịch bản + shotlist (thay file .docx) · tách 2 người nói cho video hỏi đáp / phỏng vấn | ⏳ Chờ A đạt |
+| **B** | ④ Đạo diễn + shotlist (mã cảnh, cỡ cảnh, góc máy, đạo cụ, checklist buổi quay) · quy ước đặt tên footage theo mã cảnh · Video editor đọc kịch bản + shotlist (thay file .docx) · tách 2 người nói cho video hỏi đáp / phỏng vấn | 🔄 Đang làm (chốt 2026-11-26, làm trước A3–A5) |
 | **C** | Kế hoạch theo chuỗi / lịch đăng · caption + chữ thumbnail · nhập số liệu sau đăng → học lại · kết nối API số liệu (YouTube / Facebook / TikTok — kiểm tra khả năng khi làm) · nút "Tạo dự án từ gợi ý bản tin" | ⏳ Chưa làm |
 
 ### Giai đoạn A — chi tiết
@@ -62,4 +62,5 @@ Brief → ① Ý tưởng → ② Kế hoạch nội dung → ③ Kịch bản �
 |---|---|
 | 2026-11-19 | Làm module tiền kỳ; người dùng chính là chủ shop nhưng để mở giao từng bước cho người khác; chỉ video có người nói (1–2 người); dữ liệu khán giả lấy từ FB / TikTok / YouTube; bắt đầu giai đoạn A |
 | 2026-11-20 | Trần chi phí riêng $3/ngày, chỉnh được · menu "Dự án video", đổi "Video" → "Video editor" · khi tạo dự án chọn *làm nhanh* (tự chạy, không duyệt) hoặc *qua các bước duyệt* · video mẫu bổ sung dần, đủ khuôn nào làm khuôn đó |
+| 2026-11-26 | Làm B trước A3/A4. Footage KHÔNG bắt đổi tên (máy dựng tự khớp clip theo lời + khung hình; file tên `C05.mp4` được ưu tiên) · shotlist chỉ xem / in, không tick `đã quay` · video 2 người: phụ đề khác màu theo người nói. Thứ tự: B1 shotlist → B3 Video editor đọc kịch bản + shotlist → B4 tách 2 người nói. B1 code xong (migration `0025`) |
 | 2026-11-23 | Tin nhắn tư vấn: không gửi toàn bộ, chọn mẫu ~200–400 hội thoại dài (≥ 6 tin) 6 tháng gần nhất; lấy bằng file xuất JSON của Facebook, che thông tin cá nhân ngay trên trình duyệt; bản insight thêm mục "Hành trình tư vấn → chốt đơn" |

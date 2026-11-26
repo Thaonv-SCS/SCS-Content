@@ -1,11 +1,24 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { CAC_BUOC, MUC_TIEU, NHAN_TRANG_THAI, type Brief, type Buoc, type DuyetYTuong, type KeHoach, type KichBan, type TrangThaiDuAn, type YTuong } from '@app/du-an';
+import {
+  CAC_BUOC,
+  MUC_TIEU,
+  NHAN_TRANG_THAI,
+  tenThuMucFootage,
+  type Brief,
+  type Buoc,
+  type DuyetYTuong,
+  type KeHoach,
+  type KichBan,
+  type Shotlist,
+  type TrangThaiDuAn,
+  type YTuong,
+} from '@app/du-an';
 import { requireDuAn } from '@/lib/auth';
 import { formatDateTime } from '@/lib/format';
 import { supabaseServer } from '@/lib/supabase';
 import { TuLamMoi } from '@/app/video/tu-lam-moi';
-import { ChayLaiButton, HuyButton, KeHoachView, KichBanView, YTuongView } from './workspace';
+import { ChayLaiButton, HuyButton, KeHoachView, KichBanView, LapShotlistButton, ShotlistView, YTuongView } from './workspace';
 
 type PB = { id: string; buoc: Buoc; nguon: 'ai' | 'sua-tay'; noi_dung: unknown; yeu_cau: string | null; duyet: Record<string, unknown> | null; duyet_luc: string | null; tao_luc: string };
 type SP = { name: string; link: string; gia: string; con_hang: boolean };
@@ -35,6 +48,7 @@ export default async function DuAnChiTiet({ params }: { params: Promise<{ id: st
   const viTri = CAC_BUOC.findIndex((b) => b.ma === d.buoc);
   // Bước hiện: tới bước đang làm (xong thì hiện hết); bản cũ hơn của bước sau (khi làm lại bước trước) ẩn vào lịch sử
   const hienBuoc = CAC_BUOC.filter((_, i) => tt === 'xong' || i <= viTri);
+  const kbMoi = ds.find((p) => p.buoc === 'kich-ban');
 
   return (
     <>
@@ -58,7 +72,7 @@ export default async function DuAnChiTiet({ params }: { params: Promise<{ id: st
       {/* Tiến độ các bước */}
       <div className="du-an-buoc">
         {CAC_BUOC.map((b, i) => {
-          const daXong = tt === 'xong' || i < viTri;
+          const daXong = (tt === 'xong' && ds.some((p) => p.buoc === b.ma)) || i < viTri;
           const dangO = i === viTri && tt !== 'xong';
           return (
             <a key={b.ma} href={`#${b.ma}`} className={`du-an-buoc-o ${daXong ? 'xong' : ''} ${dangO ? 'dang' : ''}`}>
@@ -96,7 +110,15 @@ export default async function DuAnChiTiet({ params }: { params: Promise<{ id: st
               {b.ten} <span className="meta" style={{ fontWeight: 400 }}>· {b.vai}</span>
             </h2>
             {!ban ? (
-              <div className="card muted">{dangLam && d.buoc === b.ma ? '⏳ AI đang làm bước này (1–2 phút)…' : 'Chưa có.'}</div>
+              <div className="card muted">
+                {dangLam && d.buoc === b.ma ? (
+                  '⏳ AI đang làm bước này (1–2 phút)…'
+                ) : b.ma === 'shotlist' && kbMoi && !dangLam && q('shotlist').lam ? (
+                  <span className="inline wrap">Chưa có shotlist. <LapShotlistButton id={d.id} /></span>
+                ) : (
+                  'Chưa có.'
+                )}
+              </div>
             ) : (
               <div className="card">
                 {ban.nguon === 'sua-tay' && <p className="meta">✎ Bản sửa tay · {formatDateTime(ban.tao_luc)}</p>}
@@ -107,7 +129,26 @@ export default async function DuAnChiTiet({ params }: { params: Promise<{ id: st
                   <KeHoachView id={d.id} nd={ban.noi_dung as KeHoach} cho={cho} q={q(b.ma)} tenKhuon={tenKhuon} ghiChuDuyet={(ban.duyet as { ghi_chu?: string } | null)?.ghi_chu} />
                 )}
                 {b.ma === 'kich-ban' && (
-                  <KichBanView id={d.id} nd={ban.noi_dung as KichBan} cho={cho} xong={tt === 'xong'} q={q(b.ma)} banIn={`/du-an/${d.id}/kich-ban`} />
+                  <KichBanView
+                    id={d.id}
+                    nd={ban.noi_dung as KichBan}
+                    cho={cho}
+                    xong={tt === 'xong' || (d.buoc === 'shotlist' && !dangLam)}
+                    q={q(b.ma)}
+                    banIn={`/du-an/${d.id}/kich-ban`}
+                  />
+                )}
+                {b.ma === 'shotlist' && (
+                  <ShotlistView
+                    id={d.id}
+                    nd={ban.noi_dung as Shotlist}
+                    cho={cho}
+                    xong={tt === 'xong'}
+                    q={q(b.ma)}
+                    banIn={`/du-an/${d.id}/shotlist`}
+                    thuMuc={tenThuMucFootage(d.ten)}
+                    cu={!dangLam && !!kbMoi && kbMoi.tao_luc > ban.tao_luc}
+                  />
                 )}
                 {cacBan.length > 1 && (
                   <details style={{ marginTop: 12 }}>

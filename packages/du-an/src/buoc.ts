@@ -3,11 +3,11 @@ import type Anthropic from '@anthropic-ai/sdk';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { fetchProductFacts, type ProductFacts } from '@app/products';
-import { anthropic, ghiChiPhi, kiemTraTran, MODEL_MANH } from './ai.ts';
+import { anthropic, ghiChiPhi, kiemTraTran, layChu, MODEL_MANH } from './ai.ts';
 import type { NoiDungKhanGia } from './khan-gia.ts';
 import { khuonChoAI, type Khuon } from './khuon.ts';
 import { thuongHieuChoAI, type TraLoiThuongHieu } from './thuong-hieu.ts';
-import type { Brief, Buoc, DuyetYTuong, KeHoach, KichBan, YTuong } from './types.ts';
+import type { Brief, Buoc, DuyetYTuong, KeHoach, KichBan, Shotlist, YTuong } from './types.ts';
 import { MUC_TIEU } from './types.ts';
 
 /**
@@ -69,6 +69,31 @@ const KichBanSchema = z.object({
   can_xac_minh: z.array(z.string()),
 });
 
+const ShotlistSchema = z.object({
+  phong_cach_quay: z.string(),
+  canh: z.array(
+    z.object({
+      ma: z.string(),
+      doan: z.array(z.number()),
+      loai: z.enum(['noi', 'can-sp', 'minh-hoa', 'do-hoa']),
+      nguoi: z.string(),
+      thoai: z.string(),
+      mo_ta: z.string(),
+      co_canh: z.string(),
+      goc_may: z.string(),
+      chuyen_dong: z.string(),
+      boi_canh: z.string(),
+      dao_cu: z.array(z.string()),
+      dien_xuat: z.string(),
+      so_lan: z.number(),
+      ghi_chu: z.string(),
+    }),
+  ),
+  thu_tu_quay: z.array(z.object({ boi_canh: z.string(), canh: z.array(z.string()), ghi_chu: z.string() })),
+  checklist: z.array(z.object({ nhom: z.string(), muc: z.array(z.string()) })),
+  luu_y: z.array(z.string()),
+});
+
 // ───────────── Bối cảnh chung (kho tri thức) ─────────────
 
 const VAI_TRO = `Mày là đội tiền kỳ sản xuất video ngắn dọc (TikTok / Facebook Reels / YouTube Shorts) của Soccerstore.vn — shop giày & đồ bóng đá Việt Nam.
@@ -128,19 +153,29 @@ async function goi<T>(
   schema: z.ZodType<T>,
 ): Promise<{ data: T; model: string }> {
   await kiemTraTran(db);
-  const res = await anthropic.messages.parse({
-    model: MODEL_MANH,
-    max_tokens: 16000,
-    thinking: { type: 'adaptive' },
-    system,
-    messages: [{ role: 'user', content: noiDung }],
-    output_config: { format: zodOutputFormat(schema), effort: 'high' },
-  });
+  // Gửi khung JSON nhưng TỰ đọc kết quả (sau khi kiểm tra bị cắt chưa) — để AI viết quá dài báo lỗi dễ hiểu,
+  // không phải "Unterminated string in JSON". Dùng stream vì max_tokens lớn (SDK không cho gọi thường).
+  const { parse: docKetQua, ...khung } = zodOutputFormat(schema);
+  const res = await anthropic.messages
+    .stream({
+      model: MODEL_MANH,
+      max_tokens: 32000,
+      thinking: { type: 'adaptive' },
+      system,
+      messages: [{ role: 'user', content: noiDung }],
+      output_config: { format: khung, effort: 'high' },
+    })
+    .finalMessage();
   await ghiChiPhi(db, buoc, res.model, res.usage, duAnId);
   if (res.stop_reason === 'refusal') throw new Error('AI từ chối làm bước này.');
-  if (res.stop_reason === 'max_tokens') throw new Error('AI viết quá dài, bị cắt giữa chừng — bấm làm lại.');
-  if (!res.parsed_output) throw new Error('AI trả về sai định dạng — bấm làm lại.');
-  return { data: res.parsed_output as T, model: res.model };
+  if (res.stop_reason === 'max_tokens') throw new Error('AI viết quá dài, bị cắt giữa chừng — bấm làm lại (hoặc góp ý "viết gọn hơn").');
+  let data: T;
+  try {
+    data = docKetQua(layChu(res)) as T;
+  } catch {
+    throw new Error('AI trả về sai định dạng — bấm làm lại.');
+  }
+  return { data, model: res.model };
 }
 
 // ───────────── Dữ liệu dự án ─────────────
@@ -303,6 +338,55 @@ export async function chayKichBan(db: SupabaseClient, d: DuAnRow, bc: BoiCanh, y
     KichBanSchema,
   );
   return { noi_dung: r.data as KichBan, model: r.model };
+}
+
+export async function chayShotlist(db: SupabaseClient, d: DuAnRow, bc: BoiCanh, yeuCau?: string): Promise<{ noi_dung: Shotlist; model: string }> {
+  const [k, kbRow] = await Promise.all([banMoiNhat(db, d.id, 'ke-hoach'), banMoiNhat(db, d.id, 'kich-ban')]);
+  if (!kbRow) throw new Error('Chưa có kịch bản để lập shotlist.');
+  const kh = (k?.noi_dung ?? null) as KeHoach | null;
+  const kb = kbRow.noi_dung as KichBan;
+  const khuon = bc.khuon.find((x) => x.ma === kh?.khuon);
+  const cu = yeuCau ? await banMoiNhat(db, d.id, 'shotlist') : null;
+  const r = await goi(
+    db,
+    d.id,
+    'shotlist',
+    bc.system,
+    [
+      briefChoAI(d),
+      kh ? `## KẾ HOẠCH ĐÃ DUYỆT (nhân vật, lưu ý sản xuất)\n${JSON.stringify({ nhan_vat: kh.nhan_vat, do_dai: kh.do_dai, luu_y_san_xuat: kh.luu_y_san_xuat, nen_tang: kh.nen_tang })}` : '',
+      khuon ? `## KHUÔN ĐANG DÙNG\n${khuonChoAI(khuon)}` : '',
+      `## KỊCH BẢN ĐÃ CHỐT (đoạn đánh số từ 1)\n${kb.doan
+        .map((x, i) => `${i + 1}. [${x.nhip}]${x.nguoi_noi ? ` (${x.nguoi_noi})` : ''} ~${x.giay}s\n   Lời: ${x.loi}\n   Hình: ${x.hinh}`)
+        .join('\n')}\nGhi chú quay của scriptwriter: ${kb.ghi_chu_quay.join(' · ') || '—'}\nCần xác minh: ${kb.can_xac_minh.join(' · ') || '—'}`,
+      cu ? `## BẢN SHOTLIST TRƯỚC (chưa đạt)\n${JSON.stringify(cu.noi_dung)}\n\n## YÊU CẦU LÀM LẠI\n${yeuCau}` : '',
+      `## VIỆC CỦA MÀY: ĐẠO DIỄN + SHOTLIST (vai director)
+Biến kịch bản thành danh sách cảnh để ekip nhỏ (1 người quay bằng máy / điện thoại, 1–2 người nói) quay xong trong một buổi ở shop hoặc sân. Video dọc 9:16.
+- phong_cach_quay: 1–3 câu: không khí hình ảnh, ánh sáng, nhịp máy chung của video.
+- canh: theo THỨ TỰ TRONG VIDEO, mã C01, C02… Mỗi đoạn kịch bản có ít nhất 1 cảnh "noi" (người nói trước máy) nếu đoạn đó có lời; thêm cảnh "can-sp" / "minh-hoa" cho phần "Hình" cần quay riêng (cảnh trám chèn đè lên lời nói); "do-hoa" cho thẻ chữ / ảnh chính hãng do editor tự làm (không quay).
+  · doan = các số đoạn kịch bản cảnh này phục vụ · nguoi = "A" / "B" / "A+B" / "" · thoai = câu nói nguyên văn trong cảnh (cảnh không lời để rỗng)
+  · mo_ta = trên hình thấy gì, cụ thể (sản phẩm nào, tay làm gì, đặt ở đâu) · co_canh = toàn / trung / cận / đặc tả · goc_may = ngang mắt / từ trên xuống / thấp hắt lên / qua vai…
+  · chuyen_dong = đứng yên / lia chậm / đẩy vào / cầm tay đi theo… · boi_canh = nơi quay (vd "quầy giày shop", "sân cỏ nhân tạo") · dao_cu = vật cần có
+  · dien_xuat = cách nói / cử chỉ (cảnh không người để rỗng) · so_lan = số lần nên quay (2–3 cho cảnh nói dài / khó, 1–2 cho cảnh ngắn) · ghi_chu = lưu ý riêng (rỗng nếu không có)
+  Cảnh "noi" khung trung, người nói nhìn thẳng ống kính, để khoảng trống phía trên đầu cho chữ hook / phụ đề phía dưới không che sản phẩm.
+- thu_tu_quay: gom cảnh theo bối cảnh để quay một lượt (thứ tự khác thứ tự trong video); mỗi nhóm có ghi chú setup (đèn, vị trí máy).
+- checklist: nhóm "Sản phẩm", "Đạo cụ", "Người & trang phục", "Kỹ thuật" (pin, thẻ nhớ, mic, quay dọc, khóa phơi sáng…), "Trước khi quay" (gom mọi điều cần xác minh còn sót).
+- luu_y: tối đa 5 điều đạo diễn dặn ekip (lỗi hay gặp với khuôn này, câu nào phải nói lại nhiều lần…).
+VIẾT GỌN: mỗi ô vài chữ tới 1 câu (co_canh, goc_may, chuyen_dong chỉ vài chữ); ô không có gì để rỗng; không lặp lại thông tin đã có ở cảnh trước. Thường 10–25 cảnh là đủ cho video 1–2 phút.`,
+    ]
+      .filter(Boolean)
+      .join('\n\n'),
+    ShotlistSchema,
+  );
+  // đánh lại mã theo thứ tự cho chắc
+  const doiMa = new Map<string, string>();
+  const canh = r.data.canh.map((c, i) => {
+    const ma = `C${String(i + 1).padStart(2, '0')}`;
+    doiMa.set(c.ma, ma);
+    return { ...c, ma };
+  });
+  const thu_tu_quay = r.data.thu_tu_quay.map((n) => ({ ...n, canh: n.canh.map((m) => doiMa.get(m) ?? m) }));
+  return { noi_dung: { ...r.data, canh, thu_tu_quay } as Shotlist, model: r.model };
 }
 
 /** Viết lại MỘT đoạn kịch bản theo góp ý, giữ nguyên các đoạn khác. */

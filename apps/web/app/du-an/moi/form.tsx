@@ -67,7 +67,7 @@ export function TaoDuAnForm({ khuon }: { khuon: { ma: string; ten: string }[] })
         </label>
         <label className="switch-row">
           <input type="radio" name="che_do" value="nhanh" checked={cheDo === 'nhanh'} onChange={() => setCheDo('nhanh')} />
-          <span>Làm nhanh <span className="meta">— tự chạy hết tới kịch bản, AI tự chọn góc tốt nhất, không dừng duyệt (~3–5 phút)</span></span>
+          <span>Làm nhanh <span className="meta">— tự chạy hết tới kịch bản + shotlist, AI tự chọn góc tốt nhất, không dừng duyệt (~4–6 phút)</span></span>
         </label>
       </div>
 

@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { banMoiNhat, boiCanh, chayKeHoach, chayKichBan, chayYTuong, layDuKienSanPham, vietLaiDoan, type DuAnRow } from './buoc.ts';
+import { banMoiNhat, boiCanh, chayKeHoach, chayKichBan, chayShotlist, chayYTuong, layDuKienSanPham, vietLaiDoan, type DuAnRow } from './buoc.ts';
 import { tomTatKhanGia } from './khan-gia.ts';
 import { buocSau, tenBuoc, type Buoc, type DuyetYTuong, type KichBan, type YTuong } from './types.ts';
 
@@ -75,7 +75,13 @@ async function chayDuAn(db: SupabaseClient, job: Extract<DuAnJob, { kind: 'buoc'
     for (;;) {
       await set({ buoc, thong_bao: `AI đang làm: ${tenBuoc(buoc)}…` });
       const r =
-        buoc === 'y-tuong' ? await chayYTuong(db, d, bc, yeuCau) : buoc === 'ke-hoach' ? await chayKeHoach(db, d, bc, yeuCau) : await chayKichBan(db, d, bc, yeuCau);
+        buoc === 'y-tuong'
+          ? await chayYTuong(db, d, bc, yeuCau)
+          : buoc === 'ke-hoach'
+            ? await chayKeHoach(db, d, bc, yeuCau)
+            : buoc === 'kich-ban'
+              ? await chayKichBan(db, d, bc, yeuCau)
+              : await chayShotlist(db, d, bc, yeuCau);
       const nhanh = d.che_do === 'nhanh';
       const { error: e } = await db.from('du_an_phien_ban').insert({
         du_an_id: d.id,
@@ -93,7 +99,7 @@ async function chayDuAn(db: SupabaseClient, job: Extract<DuAnJob, { kind: 'buoc'
         buoc = sau;
         continue;
       }
-      if (nhanh) await set({ trang_thai: 'xong', thong_bao: `Xong (làm nhanh) — kịch bản đã sẵn sàng${ghiChuSp ? ` · ⚠ ${ghiChuSp}` : ''}` });
+      if (nhanh) await set({ trang_thai: 'xong', thong_bao: `Xong (làm nhanh) — kịch bản + shotlist đã sẵn sàng${ghiChuSp ? ` · ⚠ ${ghiChuSp}` : ''}` });
       else await set({ trang_thai: 'cho-duyet', thong_bao: `Chờ duyệt: ${tenBuoc(buoc)}${ghiChuSp ? ` · ⚠ ${ghiChuSp}` : ''}` });
       return;
     }

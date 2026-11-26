@@ -2,11 +2,12 @@
  * Kiểu dữ liệu của dự án + đầu ra từng bước. KHÔNG import thư viện nặng — giao diện (client) import thẳng file này.
  */
 
-export type Buoc = 'y-tuong' | 'ke-hoach' | 'kich-ban';
+export type Buoc = 'y-tuong' | 'ke-hoach' | 'kich-ban' | 'shotlist';
 export const CAC_BUOC: { ma: Buoc; ten: string; vai: string }[] = [
   { ma: 'y-tuong', ten: 'Phát triển ý tưởng', vai: 'Content strategist' },
   { ma: 'ke-hoach', ten: 'Kế hoạch nội dung', vai: 'Content strategist' },
   { ma: 'kich-ban', ten: 'Kịch bản', vai: 'Scriptwriter' },
+  { ma: 'shotlist', ten: 'Đạo diễn + Shotlist', vai: 'Director' },
 ];
 export const tenBuoc = (b: string) => CAC_BUOC.find((x) => x.ma === b)?.ten ?? b;
 export const buocSau = (b: Buoc): Buoc | null => {
@@ -104,4 +105,58 @@ export interface KichBan {
   can_xac_minh: string[];
 }
 
-export type NoiDungBuoc = YTuong | KeHoach | KichBan;
+// ───────────── Đầu ra bước 4: Đạo diễn + Shotlist ─────────────
+export type LoaiCanh = 'noi' | 'can-sp' | 'minh-hoa' | 'do-hoa';
+export const NHAN_LOAI_CANH: Record<LoaiCanh, string> = {
+  noi: 'Người nói',
+  'can-sp': 'Cận sản phẩm',
+  'minh-hoa': 'Minh họa (không lời)',
+  'do-hoa': 'Đồ họa / ảnh (không quay)',
+};
+export interface Canh {
+  /** C01, C02… theo thứ tự trong video */
+  ma: string;
+  /** số đoạn kịch bản (1-based) cảnh này phục vụ */
+  doan: number[];
+  loai: LoaiCanh;
+  /** 'A' / 'B' / 'A+B' / '' (không ai nói) */
+  nguoi: string;
+  /** câu thoại trong cảnh (rút từ kịch bản), rỗng nếu không lời */
+  thoai: string;
+  /** người quay thấy gì trên hình */
+  mo_ta: string;
+  co_canh: string;
+  goc_may: string;
+  chuyen_dong: string;
+  boi_canh: string;
+  dao_cu: string[];
+  dien_xuat: string;
+  so_lan: number;
+  ghi_chu: string;
+}
+export interface Shotlist {
+  phong_cach_quay: string;
+  canh: Canh[];
+  /** thứ tự quay gợi ý: gom cảnh cùng bối cảnh */
+  thu_tu_quay: { boi_canh: string; canh: string[]; ghi_chu: string }[];
+  checklist: { nhom: string; muc: string[] }[];
+  luu_y: string[];
+}
+
+/** Gợi ý tên thư mục footage: <ngày>_<tên-không-dấu>. */
+export function tenThuMucFootage(ten: string, ngay = new Date()): string {
+  const slug = ten
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 50)
+    .replace(/-+$/, '');
+  const d = new Date(ngay.getTime() + 7 * 3600_000).toISOString().slice(0, 10); // giờ VN
+  return `${d}_${slug || 'video'}`;
+}
+
+export type NoiDungBuoc = YTuong | KeHoach | KichBan | Shotlist;

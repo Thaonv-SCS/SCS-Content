@@ -49,6 +49,11 @@ export default async function DuAnChiTiet({ params }: { params: Promise<{ id: st
   // Bước hiện: tới bước đang làm (xong thì hiện hết); bản cũ hơn của bước sau (khi làm lại bước trước) ẩn vào lịch sử
   const hienBuoc = CAC_BUOC.filter((_, i) => tt === 'xong' || i <= viTri);
   const kbMoi = ds.find((p) => p.buoc === 'kich-ban');
+  // Video dựng từ dự án này (người không có quyền Video editor không xem được → danh sách rỗng)
+  const { data: videos } = me.videoQuyen.length
+    ? await supabase.from('video_jobs').select('id,ten,trang_thai,thong_bao,created_at').eq('du_an_id', id).order('created_at', { ascending: false })
+    : { data: null };
+  const coShotlist = ds.some((p) => p.buoc === 'shotlist');
 
   return (
     <>
@@ -170,6 +175,28 @@ export default async function DuAnChiTiet({ params }: { params: Promise<{ id: st
           </section>
         );
       })}
+
+      {(coShotlist || (videos ?? []).length > 0) && (
+        <section id="video">
+          <h2>Video <span className="meta" style={{ fontWeight: 400 }}>· Editor</span></h2>
+          <div className="card settings wide">
+            {(videos ?? []).map((v) => (
+              <div key={v.id}>
+                <Link href={`/video/${v.id}`}>{v.ten}</Link> <span className="badge">{v.trang_thai}</span>
+                <span className="meta"> · {formatDateTime(v.created_at)}{v.thong_bao ? ` · ${v.thong_bao}` : ''}</span>
+              </div>
+            ))}
+            {me.videoQuyen.includes('lam') && kbMoi ? (
+              <div className="inline wrap">
+                <Link href={`/video/moi?du_an=${d.id}`} className="button">🎬 Tạo video từ dự án này</Link>
+                <span className="meta">Quay xong + chép footage vào máy dựng rồi bấm. Máy dựng theo kịch bản + shotlist, tự chọn lần quay tốt nhất.</span>
+              </div>
+            ) : (
+              !(videos ?? []).length && <span className="meta">Cần quyền Video editor "Làm" để tạo video.</span>
+            )}
+          </div>
+        </section>
+      )}
 
       {tt !== 'huy' && tt !== 'xong' && (
         <p style={{ marginTop: 24 }}>

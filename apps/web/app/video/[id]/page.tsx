@@ -70,6 +70,7 @@ export default async function VideoChiTiet({ params }: { params: Promise<{ id: s
       <p className="meta">
         {v.footage} · phong cách {v.phong_cach} · tạo bởi {ten.get(v.tao_boi) ?? '—'} lúc {formatDateTime(v.created_at)}
         {admin && <> · máy <strong>{may?.ten ?? '—'}</strong> · chi phí AI <strong>{usd(tongChiPhi)}</strong></>}
+        {v.du_an_id && <> · 🎬 dựng theo kịch bản của <a href={`/du-an/${v.du_an_id}`}>{(v.kich_ban as { du_an?: string } | null)?.du_an ?? 'dự án'}</a></>}
       </p>
       {v.thong_bao && <p className={v.trang_thai === 'loi' ? 'warn' : 'meta'}>{mayDangLam(v.trang_thai) ? '⏳ ' : ''}{v.thong_bao}</p>}
 

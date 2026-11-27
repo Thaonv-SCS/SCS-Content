@@ -31,10 +31,24 @@ export async function taoViec(_: string | null, f: FormData): Promise<string | n
     if (model && (model !== b.macDinh || effort !== 'medium')) mo_hinh[b.ma] = { model, effort };
   }
   const supabase = await supabaseServer();
+  // Video từ Dự án video: chụp lại kịch bản + shotlist hiện tại (đọc ở máy chủ, không tin dữ liệu gửi từ trình duyệt)
+  const duAnId = s(f, 'du_an_id');
+  let tuDuAn: Record<string, unknown> = {};
+  if (duAnId) {
+    const lay = (buoc: string) =>
+      supabase.from('du_an_phien_ban').select('noi_dung').eq('du_an_id', duAnId).eq('buoc', buoc).order('tao_luc', { ascending: false }).limit(1).maybeSingle();
+    const [{ data: da }, { data: kb }, { data: sl }] = await Promise.all([
+      supabase.from('du_an').select('ten').eq('id', duAnId).maybeSingle(),
+      lay('kich-ban'),
+      lay('shotlist'),
+    ]);
+    if (!da || !kb) return 'Không đọc được kịch bản của dự án (hoặc tài khoản không có quyền xem dự án).';
+    tuDuAn = { du_an_id: duAnId, kich_ban: { du_an: da.ten, kich_ban: kb.noi_dung, shotlist: sl?.noi_dung ?? null } };
+  }
   const { data, error } = await supabase.from('video_jobs')
-    .insert({ ten, footage, phong_cach: s(f, 'phong_cach') || 'co-ban', hook_goi_y: s(f, 'hook') || null, mo_hinh })
+    .insert({ ten, footage, phong_cach: s(f, 'phong_cach') || 'co-ban', hook_goi_y: s(f, 'hook') || null, mo_hinh, ...tuDuAn })
     .select('id').single();
-  if (error) return error.message;
+  if (error) return /du_an_id|kich_ban/.test(error.message) ? 'Chưa chạy migration 0028 (video từ dự án) trên Supabase.' : error.message;
   revalidatePath('/video');
   redirect(`/video/${data.id}`);
 }

@@ -5,8 +5,11 @@ import { BUOC, MO_HINH, UOC_TINH, usd } from '@/lib/video';
 import { taoViec } from '../actions';
 import type { Footage } from '@/lib/video';
 
-export function TaoViecForm({ footage, phongCach, daDung }: {
-  footage: Footage[]; phongCach: { ten: string; rieng: boolean }[]; daDung: string[];
+/** Tạo video từ Dự án video: điền sẵn, máy dựng đọc kịch bản + shotlist. */
+export type TuDuAn = { id: string; ten: string; tieu_de: string; hook: string; phong_cach: string | null; so_doan: number; so_canh: number };
+
+export function TaoViecForm({ footage, phongCach, daDung, tuDuAn }: {
+  footage: Footage[]; phongCach: { ten: string; rieng: boolean }[]; daDung: string[]; tuDuAn?: TuDuAn | null;
 }) {
   const [loi, action, pending] = useActionState(taoViec, null);
   const [chon, setChon] = useState<Record<string, string>>(Object.fromEntries(BUOC.map((b) => [b.ma, b.macDinh])));
@@ -18,6 +21,7 @@ export function TaoViecForm({ footage, phongCach, daDung }: {
 
   return (
     <form action={action} className="card settings wide">
+      {tuDuAn && <input type="hidden" name="du_an_id" value={tuDuAn.id} />}
       <label>
         <strong>Thư mục footage trên máy dựng</strong>
         <select name="footage" required defaultValue="" onChange={(e) => {
@@ -36,18 +40,18 @@ export function TaoViecForm({ footage, phongCach, daDung }: {
       </label>
       <label>
         <strong>Tên video</strong>
-        <input name="ten" required placeholder="vd Tất chống trơn Kelme 160K" />
+        <input name="ten" required placeholder="vd Tất chống trơn Kelme 160K" defaultValue={tuDuAn?.tieu_de ?? ''} />
       </label>
       <label>
         <strong>Phong cách</strong>
-        <select name="phong_cach" defaultValue={phongCach[0]?.ten ?? 'co-ban'}>
+        <select name="phong_cach" defaultValue={(tuDuAn?.phong_cach && phongCach.some((p) => p.ten === tuDuAn.phong_cach) ? tuDuAn.phong_cach : null) ?? phongCach[0]?.ten ?? 'co-ban'}>
           {phongCach.map((p) => <option key={p.ten} value={p.ten}>{p.ten}{p.rieng ? ' (thử nghiệm, chỉ có trên máy này)' : ''}</option>)}
         </select>
       </label>
       <label>
         <strong>Hook gợi ý</strong>
         <span className="meta">Câu mở đầu hiện chữ to 3 giây đầu (bỏ trống thì bộ não tự đề xuất)</span>
-        <input name="hook" placeholder="vd 160K cho 1 đôi tất chống trơn có gì?" />
+        <input name="hook" placeholder="vd 160K cho 1 đôi tất chống trơn có gì?" defaultValue={tuDuAn?.hook ?? ''} />
       </label>
 
       <details>
